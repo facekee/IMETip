@@ -82,15 +82,31 @@ build\imetip-smoke-host.exe
 - **UIA 头文件**：`UIAutomationClient.h` 依赖 `interface` 宏，需先包含 `<objbase.h>`。
 - **运行时库**：`MSVC_RUNTIME_LIBRARY=MultiThreaded`，Debug 配置同样使用静态 CRT，便于单文件调试分发。
 
-## 6. 持续集成
+## 6. 持续集成与发布
 
-`.github/workflows/build.yml` 在 `windows-latest` 上：
+`.github/workflows/build.yml` 在 `windows-latest` 上跑（Ninja + MSVC x64 Release）：
 
-1. `ilammy/msvc-dev-cmd` 配置 x64 环境；
-2. Ninja Release 构建；
-3. `ctest` 运行单元测试；
-4. 上传 `IMETip.exe` 构建产物；
-5. 打 `v*` 标签时自动附加到 GitHub Release。
+| 触发 | 行为 |
+| --- | --- |
+| 推送到 `master` / `main`，或提交 PR | 构建 → `ctest` 单元测试 → 上传 `IMETip-<版本>-x64.exe` 与其 SHA256 |
+| 打 `v*` 标签 | 以上全部 + 校验 exe 版本号与标签一致 + 用 `CHANGELOG.md` 对应章节做说明 + 创建 GitHub Release |
+| 手动触发（Actions 页面 Run workflow） | 同分支构建 |
+
+发布一个新版本：
+
+```bash
+# 1. 改 src/Version.h、res/IMETip.rc、res/IMETip.manifest、CMakeLists.txt、CHANGELOG.md
+git add -A && git commit -m "release: 0.1.11"
+git tag v0.1.11
+git push origin master --tags
+```
+
+推送标签后 Actions 会自动产出 Release，附件包含：
+
+- `IMETip-0.1.11-x64.exe`（单文件，静态 CRT，无需运行库）
+- `IMETip-0.1.11-x64.exe.sha256`
+
+如果 `src/Version.h` 里的版本号和标签不一致，工作流会直接失败并提示，避免发布错版本。
 
 ## 7. 常见问题
 
