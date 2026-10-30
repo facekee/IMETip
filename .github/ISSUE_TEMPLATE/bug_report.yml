@@ -1,0 +1,47 @@
+name: Bug report
+description: 报告一个问题（请尽量附上复现步骤与环境信息）
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。提交前请先确认使用的是最新版本，并已阅读 [兼容性说明](../docs/compatibility.md)。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？期望是什么？
+      placeholder: 点击 Chrome 地址栏后，指示窗出现在错误的位置……
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开记事本
+        2. 点击编辑区
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 环境
+      description: Windows 版本、DPI 缩放、显示器数量、输入法
+      placeholder: Windows 11 23H2 / 150% / 双屏 / 微软拼音
+    validations:
+      required: true
+  - type: input
+    id: app
+    attributes:
+      label: 目标应用
+      description: 问题出现在哪个应用或控件中
+      placeholder: Chrome 121 / Windows Terminal / 记事本
+  - type: textarea
+    id: logs
+    attributes:
+      label: 诊断日志（可选）
+      description: 使用 `IMETip.exe --log` 启动后，附上 `%LOCALAPPDATA%\IMETip\imetip.log` 的相关片段
+      render: text
