@@ -110,6 +110,7 @@ InputSnapshot InputProbe::Probe(HWND ownWindow, bool slowUia) {
         // 浏览器 / 终端等不使用标准光标的场景，走 UIA 文本光标回退（带超时）。
         // 首次查询需要加载目标应用的 UIA 提供程序，慢一些，复查时给更长的等待。
         uiaInfo = uia_.Query(slowUia ? 260 : 70);
+        snapshot.uiaTextAvailable = uiaInfo.ok;
         if (uiaInfo.ok && uiaInfo.editable) {
             caret = uiaInfo.caret;
             haveCaret = true;

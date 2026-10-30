@@ -12,6 +12,8 @@
 #include "ui/AppIcon.h"
 #include "util/Log.h"
 
+#include <cstdlib>
+
 namespace imetip {
 namespace {
 
@@ -24,13 +26,38 @@ constexpr UINT kMsgTray = WM_APP + 18;
 constexpr UINT_PTR kTimerDebounce = 1;
 constexpr UINT_PTR kTimerHide = 2;
 constexpr UINT_PTR kTimerRetry = 3;
+constexpr UINT_PTR kTimerCalibrateArm = 4;     // 托盘菜单关闭后再进入等待点击状态
+constexpr UINT_PTR kTimerCalibrateTimeout = 5; // 等待点击超时
 
 constexpr UINT kCmdEnable = 1001;
 constexpr UINT kCmdPause = 1002;
 constexpr UINT kCmdDurationBase = 1100; // + 秒数
 constexpr UINT kCmdAutostart = 1201;
+constexpr UINT kCmdCalibrate = 1251;
 constexpr UINT kCmdAbout = 1301;
 constexpr UINT kCmdExit = 1401;
+
+// 桌面 / 任务栏等外壳窗口即使“没有光标”也不代表需要记忆输入框位置。
+bool IsShellWindowClass(const std::wstring& className) {
+    if (className.empty()) return true;
+    static const wchar_t* kBlocked[] = {
+        L"Progman",      L"WorkerW",         L"Shell_TrayWnd",   L"Shell_SecondaryTrayWnd",
+        L"NotifyIconOverflowWindow", L"SysListView32", L"SysTreeView32", L"ToolbarWindow32",
+        L"TaskListThumbnailWnd",     L"Windows.UI.Core.CoreWindow",
+    };
+    for (const wchar_t* name : kBlocked) {
+        if (_wcsicmp(className.c_str(), name) == 0) return true;
+    }
+    return false;
+}
+
+std::wstring RootClassName(HWND window) {
+    HWND root = window ? ::GetAncestor(window, GA_ROOT) : nullptr;
+    if (!root) return std::wstring();
+    wchar_t className[128]{};
+    if (::GetClassNameW(root, className, ARRAYSIZE(className)) == 0) return std::wstring();
+    return std::wstring(className);
+}
 
 } // namespace
 
@@ -191,6 +218,8 @@ void App::Shutdown() {
         ::KillTimer(window_, kTimerDebounce);
         ::KillTimer(window_, kTimerHide);
         ::KillTimer(window_, kTimerRetry);
+        ::KillTimer(window_, kTimerCalibrateArm);
+        ::KillTimer(window_, kTimerCalibrateTimeout);
     }
 
     indicator_.Hide(false);
@@ -300,6 +329,17 @@ LRESULT App::HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lPar
             // 点击/焦点之后的一次性复查（应对目标应用异步创建光标、UIA 提供程序首次加载）
             ::KillTimer(window, kTimerRetry);
             PerformCheck(true);
+        } else if (wParam == kTimerCalibrateArm) {
+            ::KillTimer(window, kTimerCalibrateArm);
+            calibrating_ = true;
+            ::SetTimer(window, kTimerCalibrateTimeout, 8000, nullptr);
+            tray_.ShowBalloon(L"IMETip 校准提示位置", L"请在 8 秒内点击目标程序的输入框");
+        } else if (wParam == kTimerCalibrateTimeout) {
+            ::KillTimer(window, kTimerCalibrateTimeout);
+            if (calibrating_) {
+                calibrating_ = false;
+                tray_.ShowBalloon(L"IMETip 校准已取消", L"没有收到点击，位置未改变", NIIF_WARNING);
+            }
         }
         return 0;
 
@@ -344,6 +384,25 @@ void App::OnTrigger(InputTrigger trigger) {
         return;
     }
 
+    if (trigger == InputTrigger::Click) {
+        POINT point{};
+        if (::GetCursorPos(&point)) {
+            clickPoint_ = point;
+            clickPointValid_ = true;
+        }
+    }
+
+    if (trigger == InputTrigger::Click && calibrating_) {
+        // 校准：把这次点击的位置记为当前程序的输入框位置，随后立即按新位置提示一次。
+        CaptureCalibrationPoint();
+        clickTriggered_ = true;
+        retryCount_ = 0;
+        ScheduleCheck();
+        return;
+    }
+
+    clickTriggered_ = (trigger == InputTrigger::Click);
+
     if (trigger != InputTrigger::Key) {
         retryCount_ = 0;
     }
@@ -362,7 +421,28 @@ void App::ScheduleCheck() {
 void App::PerformCheck(bool slowUia) {
     if (paused_ || exiting_) return;
 
-    const InputSnapshot snapshot = probe_.Probe(window_, slowUia);
+    InputSnapshot snapshot = probe_.Probe(window_, slowUia);
+
+    if (snapshot.inputActive) {
+        if (!snapshot.viaUia) {
+            LearnAnchor(snapshot);
+        }
+    } else if (!ApplyAnchor(snapshot)) {
+        // 既没有光标也没有可复用的位置记录：按 PRD 降级为不显示。
+        if (!snapshot.uiaTextAvailable) {
+            RememberCaretlessWindow();
+        }
+        if (log::Enabled()) {
+            HWND root = ::GetAncestor(snapshot.focusWindow, GA_ROOT);
+            RECT windowRect{};
+            ::GetWindowRect(root, &windowRect);
+            wchar_t className[128]{};
+            ::GetClassNameW(root, className, ARRAYSIZE(className));
+            log::Write(L"记忆位置未命中：class=%s size=%dx%d 记录=%zu", className,
+                       windowRect.right - windowRect.left, windowRect.bottom - windowRect.top, config_.anchors.size());
+        }
+    }
+
     const IndicatorState state{snapshot.chinese, snapshot.capsLock};
 
     if (!snapshot.inputActive) {
@@ -378,17 +458,63 @@ void App::PerformCheck(bool slowUia) {
             ++retryCount_;
             ::SetTimer(window_, kTimerRetry, retryCount_ == 1 ? 200 : 600, nullptr);
         }
+        clickTriggered_ = false;
         return;
     }
 
-    const SessionDecision decision = session_.OnProbe(true, state, snapshot.sessionKey);
+    std::uintptr_t sessionKey = snapshot.sessionKey;
+    if (snapshot.viaAnchor) {
+        // 位置记忆模式：点击输入框附近或左侧会话列表视为重新进入输入框
+        // （切换聊天、切换单元格等），即使状态没变也提示一次；
+        // 点消息气泡等区域不算，避免翻阅消息时反复弹出。
+        const bool hasSession =
+            session_.SessionActive() && anchorSessionKey_ != 0 && anchorSessionWindow_ == snapshot.sessionKey;
+        bool activate = !hasSession;
+        bool blockedByClick = false;
+        if (clickTriggered_ && clickPointValid_ && anchorWindow_) {
+            RECT windowRect{};
+            if (::GetWindowRect(anchorWindow_, &windowRect)) {
+                const int anchorX = anchorPoint_.x - windowRect.left;
+                const int anchorY = anchorPoint_.y - windowRect.top;
+                const int clickX = clickPoint_.x - windowRect.left;
+                const int clickY = clickPoint_.y - windowRect.top;
+                if (IsAnchorActivationPoint(anchorX, anchorY, clickX, clickY)) {
+                    activate = true; // 点输入框/会话列表：重新提示一次
+                } else if (!hasSession) {
+                    blockedByClick = true; // 点消息等区域且当前没有会话：不提示
+                }
+            }
+        }
+        if (blockedByClick) {
+            if (log::Enabled()) {
+                log::Write(L"点击位置不算进入输入框：click=(%ld,%ld) anchor=(%ld,%ld)", clickPoint_.x, clickPoint_.y,
+                           anchorPoint_.x, anchorPoint_.y);
+            }
+            clickTriggered_ = false;
+            clickPointValid_ = false;
+            return;
+        }
+        if (activate) {
+            anchorSessionKey_ = ++clickSerial_;
+            anchorSessionWindow_ = snapshot.sessionKey;
+        }
+        sessionKey = ~anchorSessionKey_;
+    } else {
+        anchorSessionKey_ = 0;
+        anchorSessionWindow_ = 0;
+    }
+    clickTriggered_ = false;
+    clickPointValid_ = false;
+
+    const SessionDecision decision = session_.OnProbe(true, state, sessionKey);
     switch (decision.action) {
     case IndicatorAction::Show:
     case IndicatorAction::Refresh:
         ShowIndicator(snapshot, state);
         ::SetTimer(window_, kTimerHide, static_cast<UINT>(config_.hideDelayMs), nullptr);
-        log::Write(L"显示指示窗：%s%s%s%s", state.chinese ? L"中" : L"英", state.capsLock ? L" + A" : L"",
-                   snapshot.viaUia ? L"（UIA 光标）" : L"", snapshot.imeInferred ? L"（状态推断）" : L"");
+        log::Write(L"显示指示窗：%s%s%s%s%s", state.chinese ? L"中" : L"英", state.capsLock ? L" + A" : L"",
+                   snapshot.viaUia ? L"（UIA 光标）" : L"", snapshot.viaAnchor ? L"（记忆位置）" : L"",
+                   snapshot.imeInferred ? L"（状态推断）" : L"");
         break;
 
     case IndicatorAction::Hide:
@@ -400,6 +526,148 @@ void App::PerformCheck(bool slowUia) {
     default:
         break;
     }
+}
+
+bool App::ApplyAnchor(InputSnapshot& snapshot) {
+    if (!config_.anchorEnabled || snapshot.uiaTextAvailable) return false;
+
+    HWND foreground = snapshot.focusWindow ? snapshot.focusWindow : ::GetForegroundWindow();
+    HWND root = ::GetAncestor(foreground, GA_ROOT);
+    if (!root || root == window_) return false;
+
+    RECT windowRect{};
+    if (!::GetWindowRect(root, &windowRect)) return false;
+    const int width = windowRect.right - windowRect.left;
+    const int height = windowRect.bottom - windowRect.top;
+    if (width <= 0 || height <= 0) return false;
+
+    wchar_t className[128]{};
+    if (::GetClassNameW(root, className, ARRAYSIZE(className)) == 0) return false;
+
+    const WindowAnchor* anchor = FindAnchor(config_.anchors, className, width, height);
+    if (!anchor) return false;
+
+    const int x = windowRect.left + anchor->offsetX;
+    const int y = windowRect.top + anchor->offsetY;
+    if (x < windowRect.left || x >= windowRect.right || y < windowRect.top || y >= windowRect.bottom) return false;
+
+    snapshot.inputActive = true;
+    snapshot.viaAnchor = true;
+    snapshot.caret = RECT{x, y, x + 1, y + 1};
+    snapshot.sessionKey = reinterpret_cast<std::uintptr_t>(root);
+    anchorPoint_ = POINT{x, y};
+    anchorWindow_ = root;
+    // 这类程序同样读不到输入法状态，沿用本地维护的值。
+    snapshot.chinese = probe_.LastKnownChinese();
+    snapshot.imeInferred = true;
+    return true;
+}
+
+void App::LearnAnchor(const InputSnapshot& snapshot) {
+    if (!config_.anchorEnabled || !IsCaretlessWindow(snapshot.focusWindow)) return;
+
+    HWND root = ::GetAncestor(snapshot.focusWindow, GA_ROOT);
+    if (!root) return;
+
+    RECT windowRect{};
+    if (!::GetWindowRect(root, &windowRect)) return;
+    const int width = windowRect.right - windowRect.left;
+    const int height = windowRect.bottom - windowRect.top;
+    if (width <= 0 || height <= 0) return;
+
+    wchar_t className[128]{};
+    if (::GetClassNameW(root, className, ARRAYSIZE(className)) == 0) return;
+
+    const int offsetX = snapshot.caret.left - windowRect.left;
+    const int offsetY = snapshot.caret.top - windowRect.top;
+    if (offsetX < 0 || offsetY < 0 || offsetX >= width || offsetY >= height) return;
+
+    const WindowAnchor* existing = FindAnchor(config_.anchors, className, width, height);
+    if (existing && std::abs(existing->offsetX - offsetX) <= 2 && std::abs(existing->offsetY - offsetY) <= 2) {
+        return;
+    }
+
+    WindowAnchor anchor;
+    anchor.windowClass = className;
+    anchor.offsetX = offsetX;
+    anchor.offsetY = offsetY;
+    anchor.width = width;
+    anchor.height = height;
+    UpsertAnchor(config_.anchors, anchor);
+    config_.Save(); // 立即落盘：位置记忆是低频事件，避免异常退出时丢失
+    log::Write(L"记住输入框位置：%s 偏移 (%d,%d) 窗口 %dx%d", className, offsetX, offsetY, width, height);
+}
+
+void App::RememberCaretlessWindow() {
+    const std::wstring className = RootClassName(::GetForegroundWindow());
+    if (IsShellWindowClass(className)) return;
+
+    for (const std::wstring& existing : caretlessClasses_) {
+        if (_wcsicmp(existing.c_str(), className.c_str()) == 0) return;
+    }
+    constexpr size_t kMaxClasses = 8;
+    if (caretlessClasses_.size() >= kMaxClasses) {
+        caretlessClasses_.erase(caretlessClasses_.begin());
+    }
+    caretlessClasses_.push_back(className);
+}
+
+bool App::IsCaretlessWindow(HWND window) const {
+    const std::wstring className = RootClassName(window);
+    if (IsShellWindowClass(className)) return false;
+    for (const std::wstring& existing : caretlessClasses_) {
+        if (_wcsicmp(existing.c_str(), className.c_str()) == 0) return true;
+    }
+    return false;
+}
+
+void App::StartCalibration() {
+    calibrating_ = false;
+    ::KillTimer(window_, kTimerCalibrateTimeout);
+    // 等托盘菜单彻底关闭再开始等待，避免把菜单点击当成校准点击。
+    ::SetTimer(window_, kTimerCalibrateArm, 400, nullptr);
+}
+
+void App::CancelCalibration() {
+    calibrating_ = false;
+    ::KillTimer(window_, kTimerCalibrateArm);
+    ::KillTimer(window_, kTimerCalibrateTimeout);
+}
+
+void App::CaptureCalibrationPoint() {
+    calibrating_ = false;
+    ::KillTimer(window_, kTimerCalibrateTimeout);
+
+    POINT point{};
+    if (!::GetCursorPos(&point)) return;
+
+    HWND target = ::WindowFromPoint(point);
+    HWND root = target ? ::GetAncestor(target, GA_ROOT) : nullptr;
+    if (!root || root == window_) return;
+
+    RECT windowRect{};
+    if (!::GetWindowRect(root, &windowRect)) return;
+    const int width = windowRect.right - windowRect.left;
+    const int height = windowRect.bottom - windowRect.top;
+    if (width <= 0 || height <= 0) return;
+
+    wchar_t className[128]{};
+    if (::GetClassNameW(root, className, ARRAYSIZE(className)) == 0) return;
+
+    const int offsetX = point.x - windowRect.left;
+    const int offsetY = point.y - windowRect.top;
+    if (offsetX < 0 || offsetY < 0 || offsetX >= width || offsetY >= height) return;
+
+    WindowAnchor anchor;
+    anchor.windowClass = className;
+    anchor.offsetX = offsetX;
+    anchor.offsetY = offsetY;
+    anchor.width = width;
+    anchor.height = height;
+    UpsertAnchor(config_.anchors, anchor);
+    config_.Save();
+    log::Write(L"校准输入框位置：%s 偏移 (%d,%d) 窗口 %dx%d", className, offsetX, offsetY, width, height);
+    tray_.ShowBalloon(L"IMETip 校准完成", L"已记住该程序的输入框位置");
 }
 
 void App::ShowIndicator(const InputSnapshot& snapshot, const IndicatorState& state) {
@@ -432,6 +700,7 @@ void App::SetPaused(bool paused) {
             ::KillTimer(window_, kTimerDebounce);
             ::KillTimer(window_, kTimerRetry);
         }
+        CancelCalibration();
         session_.Reset();
         indicator_.Hide(false);
         events_.SetEnabled(false);
@@ -485,6 +754,8 @@ void App::ShowTrayMenu(POINT point) {
 
     ::AppendMenuW(menu, MF_STRING | (autostart::IsEnabled() ? MF_CHECKED : 0), kCmdAutostart, L"开机自启");
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    ::AppendMenuW(menu, MF_STRING, kCmdCalibrate, L"校准提示位置（点击输入框）");
+    ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     ::AppendMenuW(menu, MF_STRING, kCmdAbout, L"关于 IMETip");
     ::AppendMenuW(menu, MF_STRING, kCmdExit, L"退出");
 
@@ -511,6 +782,10 @@ void App::HandleTrayCommand(UINT command) {
     }
     if (command == kCmdAutostart) {
         autostart::SetEnabled(!autostart::IsEnabled());
+        return;
+    }
+    if (command == kCmdCalibrate) {
+        StartCalibration();
         return;
     }
     if (command == kCmdAbout) {

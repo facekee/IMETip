@@ -14,7 +14,11 @@ struct InputSnapshot {
     bool chinese = false;
     bool capsLock = false;
     bool viaUia = false;
+    bool viaAnchor = false;   // 位置来自“记住的输入框位置”（该窗口不提供任何光标）
     bool imeInferred = false; // IME 状态为本地推断（系统接口读不到时按 Shift/Ctrl+Space 翻转）
+    // 焦点元素是否提供 UIA 文本接口；为 true 时不使用“记住的输入框位置”，
+    // 避免把网页正文、只读文本误当成输入框。
+    bool uiaTextAvailable = false;
     RECT caret{};
     HWND focusWindow = nullptr;
     DWORD threadId = 0;

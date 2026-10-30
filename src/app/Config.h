@@ -1,6 +1,9 @@
 #pragma once
 
 #include <string>
+#include <vector>
+
+#include "core/WindowAnchor.h"
 
 namespace imetip {
 
@@ -14,7 +17,11 @@ struct Config {
     bool fadeOut = false;   // 隐藏时是否使用 200ms 淡出
     bool startPaused = false;
     bool logEnabled = false;
-    bool imeChinese = true; // 上次退出时的中英文状态（TSF 应用读不到状态时用于初始化推断值）
+    bool imeChinese = true;  // 上次退出时的中英文状态（TSF 应用读不到状态时用于初始化推断值）
+    bool anchorEnabled = true; // 无可定位光标的窗口，使用记住的输入框位置
+
+    // 按窗口类名记住的输入框位置（见 core/WindowAnchor.h）。
+    std::vector<WindowAnchor> anchors;
 
     static Config Load();
     void Save() const;

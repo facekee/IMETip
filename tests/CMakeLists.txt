@@ -2,6 +2,7 @@ add_executable(imetip_tests
     test_main.cpp
     test_session_logic.cpp
     test_indicator_layout.cpp
+    test_window_anchor.cpp
 )
 
 target_include_directories(imetip_tests PRIVATE

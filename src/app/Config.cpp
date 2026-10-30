@@ -4,12 +4,41 @@
 #include <shlobj.h>
 
 #include <algorithm>
+#include <cstdio>
 
 namespace imetip {
 namespace {
 
 int Clamp(int value, int low, int high) {
     return std::max(low, std::min(value, high));
+}
+
+// "dx,dy,w,h"
+bool ParseAnchorValue(const std::wstring& text, WindowAnchor& anchor) {
+    int dx = 0, dy = 0, w = 0, h = 0;
+    if (::swscanf_s(text.c_str(), L"%d,%d,%d,%d", &dx, &dy, &w, &h) != 4) return false;
+    if (w <= 0 || h <= 0) return false;
+    anchor.offsetX = dx;
+    anchor.offsetY = dy;
+    anchor.width = w;
+    anchor.height = h;
+    return true;
+}
+
+void LoadAnchors(const wchar_t* path, std::vector<WindowAnchor>& anchors) {
+    std::vector<wchar_t> buffer(4096, L'\0');
+    const DWORD copied = ::GetPrivateProfileSectionW(L"anchors", buffer.data(), static_cast<DWORD>(buffer.size()), path);
+    if (copied == 0) return;
+
+    for (const wchar_t* line = buffer.data(); *line; line += wcslen(line) + 1) {
+        const wchar_t* equal = wcschr(line, L'=');
+        if (!equal) continue;
+        WindowAnchor anchor;
+        anchor.windowClass.assign(line, static_cast<size_t>(equal - line));
+        if (anchor.windowClass.empty()) continue;
+        if (!ParseAnchorValue(equal + 1, anchor)) continue;
+        anchors.push_back(anchor);
+    }
 }
 
 } // namespace
@@ -43,6 +72,8 @@ Config Config::Load() {
     config.startPaused = ::GetPrivateProfileIntW(L"startup", L"startPaused", 0, path) != 0;
     config.logEnabled = ::GetPrivateProfileIntW(L"diagnostics", L"log", 0, path) != 0;
     config.imeChinese = ::GetPrivateProfileIntW(L"indicator", L"imeChinese", 1, path) != 0;
+    config.anchorEnabled = ::GetPrivateProfileIntW(L"indicator", L"anchorMode", 1, path) != 0;
+    LoadAnchors(path, config.anchors);
 
     config.hideDelayMs = Clamp(config.hideDelayMs, 1000, 30000);
     config.offsetX = Clamp(config.offsetX, 0, 64);
@@ -66,8 +97,17 @@ void Config::Save() const {
     ::WritePrivateProfileStringW(L"indicator", L"debounceMs", buffer, path);
     ::WritePrivateProfileStringW(L"indicator", L"fadeOut", fadeOut ? L"1" : L"0", path);
     ::WritePrivateProfileStringW(L"indicator", L"imeChinese", imeChinese ? L"1" : L"0", path);
+    ::WritePrivateProfileStringW(L"indicator", L"anchorMode", anchorEnabled ? L"1" : L"0", path);
     ::WritePrivateProfileStringW(L"startup", L"startPaused", startPaused ? L"1" : L"0", path);
     ::WritePrivateProfileStringW(L"diagnostics", L"log", logEnabled ? L"1" : L"0", path);
+
+    // 位置记忆整段重写，避免残留已失效的窗口类。
+    ::WritePrivateProfileStringW(L"anchors", nullptr, nullptr, path);
+    for (const WindowAnchor& anchor : anchors) {
+        wchar_t value[64]{};
+        ::swprintf_s(value, L"%d,%d,%d,%d", anchor.offsetX, anchor.offsetY, anchor.width, anchor.height);
+        ::WritePrivateProfileStringW(L"anchors", anchor.windowClass.c_str(), value, path);
+    }
 }
 
 } // namespace imetip

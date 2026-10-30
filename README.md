@@ -29,6 +29,7 @@
 | 启用提示 / 暂停提示 | 互斥勾选；暂停时停止检测并隐藏指示窗 |
 | 显示时长 | 3 / 5 / 8 / 10 秒，默认 5 秒 |
 | 开机自启 | 写入 `HKCU\...\Run`，无需管理员权限 |
+| 校准提示位置（点击输入框） | 对不暴露光标的自绘程序（如微信），点一下它的输入框即可指定提示位置 |
 | 关于 IMETip | 版本与配置目录 |
 | 退出 | 注销钩子、移除托盘图标后退出 |
 
@@ -55,13 +56,21 @@ offsetX=8          ; 相对光标的水平偏移（96 DPI 逻辑像素）
 offsetY=8          ; 相对光标的垂直偏移
 debounceMs=50      ; 事件合并去抖窗口（20–200）
 fadeOut=0          ; 隐藏时是否 200ms 淡出
+imeChinese=1       ; 上次退出时的中英文状态（推断用）
+anchorMode=1       ; 无可定位光标时使用记住的输入框位置；0 = 严格按 PRD 不显示
 
 [startup]
 startPaused=0
 
 [diagnostics]
 log=0
+
+[anchors]
+; 按窗口类记住的输入框相对位置：dx,dy,窗口宽,窗口高
+Qt51514QWindowIcon=597,1071,1863,1333
 ```
+
+`[anchors]` 由程序自动维护，不需要手工编辑；校准一次后该程序的提示位置就固定下来，窗口尺寸变化超过 15% 时需要重新校准。
 
 ## 构建
 
@@ -97,6 +106,7 @@ ctest --test-dir build --output-on-failure
 | 关注点 | 方案 |
 | --- | --- |
 | 输入态检测 | `GetGUIThreadInfo` 标准光标优先；Chrome / Windows Terminal 等回退 UI Automation 文本光标 |
+| 无光标程序 | 按窗口类记住输入框相对位置（微信等），托盘可校准；点击输入框附近或会话列表才算重新进入 |
 | 中英文判断 | `ImmGetConversionStatus` + `IME_CMODE_NATIVE` 语言掩码，不硬编码具体输入法返回值 |
 | 大小写 | 仅 `GetKeyState(VK_CAPITAL)`，不处理 Shift 临时大写 |
 | 事件源 | `SetWinEventHook`（前台 / 焦点）+ 低级鼠标 / 键盘钩子，全部合并去抖 50 ms |
@@ -111,6 +121,7 @@ ctest --test-dir build --output-on-failure
 
 - Windows 10 1903+ / Windows 11，x64。
 - 记事本、Chrome、Edge、Windows Terminal、Office 等标准控件优先走标准光标，失败时回退 UIA。
+- 微信等自绘输入框：首次双击输入框（或托盘菜单校准）后记住位置，之后切换聊天即可正常提示。
 - 微软拼音、搜狗拼音、QQ 拼音等以语言掩码判断，不依赖私有返回值。
 - 高 DPI / 多显示器 / 深色任务栏。
 
