@@ -4,7 +4,6 @@
 #include <shellapi.h>
 #include <windowsx.h>
 
-#include <algorithm>
 #include <string>
 
 #include "Version.h"
@@ -281,7 +280,7 @@ LRESULT App::HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lPar
 
     switch (message) {
     case kMsgInputCheck:
-        OnTrigger(static_cast<InputTrigger>(wParam), lParam);
+        OnTrigger(static_cast<InputTrigger>(wParam));
         return 0;
 
     case kMsgTray:
@@ -324,7 +323,7 @@ LRESULT App::HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lPar
     return ::DefWindowProcW(window, message, wParam, lParam);
 }
 
-void App::OnTrigger(InputTrigger trigger, LPARAM payload) {
+void App::OnTrigger(InputTrigger trigger) {
     if (paused_ || exiting_) return;
 
     if (trigger == InputTrigger::Scroll) {
@@ -345,19 +344,6 @@ void App::OnTrigger(InputTrigger trigger, LPARAM payload) {
         return;
     }
 
-    if (trigger == InputTrigger::Click && session_.SessionActive() && lastCaretValid_) {
-        // 单窗口应用（如微信）切换会话时焦点 HWND 不变，会话会被判为“同一次输入”。
-        // 点击位置远离当前光标（例如在左侧会话列表里切换聊天）时视为开启新的输入会话，
-        // 这样切换聊天后仍会重新提示一次；点击光标附近仍遵循“不重复弹出”。
-        const int x = GET_X_LPARAM(payload);
-        const int y = GET_Y_LPARAM(payload);
-        constexpr int kFarClickDistance = 250;
-        if (IsClickFarFromCaret(lastCaret_, x, y, kFarClickDistance)) {
-            farClick_ = true;
-            session_.EndSession(); // 不隐藏窗口，随后探测会按新会话重新显示
-        }
-    }
-
     if (trigger != InputTrigger::Key) {
         retryCount_ = 0;
     }
@@ -373,41 +359,10 @@ void App::ScheduleCheck() {
     ::SetTimer(window_, kTimerDebounce, static_cast<UINT>(config_.debounceMs), nullptr);
 }
 
-bool App::CanUseStickyAnchor(const InputSnapshot& snapshot) const {
-    // 仅用于“窗口本身不提供任何光标信息”的应用（如微信 Qt 输入框）：
-    // 沿用同窗口上次检测到的光标位置，避免切换会话后完全无法提示。
-    if (!config_.stickyAnchor || !lastCaretValid_ || snapshot.uiaTextAvailable) return false;
-    if (snapshot.focusWindow != lastCaretWindow_) return false;
-    if (stickyWindow_ != snapshot.focusWindow && !farClick_) return false;
-    if (::GetTickCount64() - lastCaretTick_ > 5 * 60 * 1000ULL) return false;
-
-    RECT windowRect{};
-    if (!::GetWindowRect(lastCaretWindow_, &windowRect)) return false;
-    const POINT center{(lastCaret_.left + lastCaret_.right) / 2, (lastCaret_.top + lastCaret_.bottom) / 2};
-    return ::PtInRect(&windowRect, center) != FALSE;
-}
-
 void App::PerformCheck(bool slowUia) {
     if (paused_ || exiting_) return;
 
-    InputSnapshot snapshot = probe_.Probe(window_, slowUia);
-
-    if (snapshot.inputActive) {
-        lastCaret_ = snapshot.caret;
-        lastCaretValid_ = true;
-        lastCaretWindow_ = snapshot.focusWindow;
-        lastCaretTick_ = ::GetTickCount64();
-        stickyWindow_ = nullptr;
-    } else if (CanUseStickyAnchor(snapshot)) {
-        // 该窗口没有可用光标（微信切换会话后 Qt 会销毁光标），沿用上次位置
-        snapshot.inputActive = true;
-        snapshot.caret = lastCaret_;
-        snapshot.sessionKey = reinterpret_cast<std::uintptr_t>(lastCaretWindow_);
-        stickyWindow_ = lastCaretWindow_;
-        log::Write(L"窗口未提供光标，沿用上次光标位置 (%ld,%ld)", lastCaret_.left, lastCaret_.top);
-    }
-    farClick_ = false;
-
+    const InputSnapshot snapshot = probe_.Probe(window_, slowUia);
     const IndicatorState state{snapshot.chinese, snapshot.capsLock};
 
     if (!snapshot.inputActive) {

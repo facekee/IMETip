@@ -15,7 +15,6 @@ struct Config {
     bool startPaused = false;
     bool logEnabled = false;
     bool imeChinese = true; // 上次退出时的中英文状态（TSF 应用读不到状态时用于初始化推断值）
-    bool stickyAnchor = true; // 窗口不提供光标时，沿用同窗口上次检测到的光标位置（微信等）
 
     static Config Load();
     void Save() const;

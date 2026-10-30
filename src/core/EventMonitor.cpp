@@ -99,9 +99,9 @@ void EventMonitor::UninstallHooks() {
     }
 }
 
-void EventMonitor::Notify(InputTrigger trigger, LPARAM payload) {
+void EventMonitor::Notify(InputTrigger trigger) {
     if (!enabled_ || !notifyWindow_) return;
-    ::PostMessageW(notifyWindow_, message_, static_cast<WPARAM>(trigger), payload);
+    ::PostMessageW(notifyWindow_, message_, static_cast<WPARAM>(trigger), 0);
 }
 
 void CALLBACK EventMonitor::WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD,
@@ -125,15 +125,14 @@ void CALLBACK EventMonitor::WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, 
 LRESULT CALLBACK EventMonitor::MouseProc(int code, WPARAM wParam, LPARAM lParam) {
     EventMonitor* monitor = g_monitor;
     if (code == HC_ACTION && monitor && monitor->enabled_) {
-        // 只关心动作类型与点击位置，不记录坐标序列、不记录任何内容。
+        // 只关心动作类型，不记录坐标、不记录任何内容。
         if (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN) {
-            const auto* mouse = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
-            const LPARAM point = mouse ? MAKELPARAM(mouse->pt.x, mouse->pt.y) : 0;
-            monitor->Notify(InputTrigger::Click, point);
+            monitor->Notify(InputTrigger::Click);
         } else if (wParam == WM_MOUSEWHEEL) {
             monitor->Notify(InputTrigger::Scroll);
         }
     }
+    UNREFERENCED_PARAMETER(lParam);
     return ::CallNextHookEx(nullptr, code, wParam, lParam);
 }
 

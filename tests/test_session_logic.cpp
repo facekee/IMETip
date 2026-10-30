@@ -99,15 +99,6 @@ void RunSessionLogicTests() {
     }
 
     {
-        // 点击距离判定：远离光标视为切换会话，光标附近视为同一次输入
-        const RECT caret{100, 100, 110, 130};
-        CHECK(!IsClickFarFromCaret(caret, 105, 115, 250));  // 光标内部
-        CHECK(!IsClickFarFromCaret(caret, 300, 200, 250));  // 距离约 190px
-        CHECK(IsClickFarFromCaret(caret, 900, 800, 250));   // 微信会话列表：远离输入框
-        CHECK(IsClickFarFromCaret(caret, 100, 900, 250));   // 仅垂直方向远离
-    }
-
-    {
         // 暂停时 Reset 后不残留会话
         SessionLogic session;
         session.OnProbe(true, chinese, 0x1000);

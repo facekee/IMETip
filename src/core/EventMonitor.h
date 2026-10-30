@@ -32,7 +32,7 @@ private:
     static LRESULT CALLBACK MouseProc(int code, WPARAM wParam, LPARAM lParam);
     static LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam);
 
-    void Notify(InputTrigger trigger, LPARAM payload = 0);
+    void Notify(InputTrigger trigger);
     void InstallHooks();
     void UninstallHooks();
 
