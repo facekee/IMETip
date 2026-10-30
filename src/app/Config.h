@@ -10,7 +10,7 @@ namespace imetip {
 // 用户配置，持久化在 %LOCALAPPDATA%\IMETip\config.ini。
 // 全部为本地配置，不含任何输入内容。
 struct Config {
-    int hideDelayMs = 5000; // 指示窗显示时长
+    int hideDelayMs = 1000; // 指示窗显示时长（0.5 / 1 / 2 / 5 秒四档，默认 1 秒）
     int offsetX = 32;       // 指示窗相对光标边缘的水平间距（96 DPI 逻辑像素）
     int debounceMs = 50;    // 事件合并去抖窗口
     bool fadeOut = false;   // 隐藏时是否使用 200ms 淡出

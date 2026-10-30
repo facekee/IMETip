@@ -2,6 +2,13 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.10] - 2026-10-30
+
+### 变更
+
+- **显示时长改为 0.5 / 1 / 2 / 5 秒四档，默认 1 秒**（原来是 1 / 2 / 3 / 5 / 8 / 10 秒、默认 5 秒）。`hideDelayMs` 下限相应放宽到 500。
+- 隐藏时补一条日志（`显示时长到，隐藏指示窗（N ms）`），方便核对计时。
+
 ## [0.1.9] - 2026-10-30
 
 ### 修复
@@ -122,6 +129,7 @@
 - 浏览器可编辑区域依赖 UIA 的 `IsReadOnly` 属性，个别网页编辑器可能误判。
 - 高权限窗口（管理员程序）在普通权限下可能无法读取光标信息。
 
+[0.1.10]: https://github.com/imetip/imetip/releases/tag/v0.1.10
 [0.1.9]: https://github.com/imetip/imetip/releases/tag/v0.1.9
 [0.1.8]: https://github.com/imetip/imetip/releases/tag/v0.1.8
 [0.1.7]: https://github.com/imetip/imetip/releases/tag/v0.1.7

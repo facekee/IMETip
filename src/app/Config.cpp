@@ -113,7 +113,7 @@ Config Config::Load() {
         config.offsetX = 32;
     }
 
-    config.hideDelayMs = Clamp(config.hideDelayMs, 1000, 30000);
+    config.hideDelayMs = Clamp(config.hideDelayMs, 500, 30000);
     config.offsetX = Clamp(config.offsetX, 0, 64);
     config.debounceMs = Clamp(config.debounceMs, 20, 200);
     return config;

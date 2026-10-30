@@ -31,7 +31,7 @@ constexpr UINT_PTR kTimerCalibrateTimeout = 5; // 等待点击超时
 
 constexpr UINT kCmdEnable = 1001;
 constexpr UINT kCmdPause = 1002;
-constexpr UINT kCmdDurationBase = 1100; // + 秒数
+constexpr UINT kCmdDurationBase = 1100; // + 序号（0.5/1/2/5 秒）
 constexpr UINT kCmdAutostart = 1201;
 constexpr UINT kCmdCalibrate = 1251;
 constexpr UINT kCmdStateChinese = 1261;
@@ -327,6 +327,7 @@ LRESULT App::HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lPar
             ::KillTimer(window, kTimerHide);
             if (session_.OnHideTimeout().action == IndicatorAction::Hide) {
                 indicator_.Hide(config_.fadeOut);
+                log::Write(L"显示时长到，隐藏指示窗（%d ms）", config_.hideDelayMs);
             }
         } else if (wParam == kTimerRetry) {
             // 点击/焦点之后的一次性复查（应对目标应用异步创建光标、UIA 提供程序首次加载）
@@ -747,12 +748,17 @@ void App::ShowTrayMenu(POINT point) {
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
 
     HMENU durations = ::CreatePopupMenu();
-    const int seconds[] = {1, 2, 3, 5, 8, 10};
-    for (int value : seconds) {
+    const int durationsMs[] = {500, 1000, 2000, 5000};
+    for (int i = 0; i < 4; ++i) {
+        const int ms = durationsMs[i];
         wchar_t label[32]{};
-        ::swprintf_s(label, L"%d 秒", value);
-        ::AppendMenuW(durations, MF_STRING | (config_.hideDelayMs == value * 1000 ? MF_CHECKED : 0),
-                      kCmdDurationBase + static_cast<UINT>(value), label);
+        if (ms % 1000 == 0) {
+            ::swprintf_s(label, L"%d 秒", ms / 1000);
+        } else {
+            ::swprintf_s(label, L"%d.%d 秒", ms / 1000, (ms % 1000) / 100);
+        }
+        ::AppendMenuW(durations, MF_STRING | (config_.hideDelayMs == ms ? MF_CHECKED : 0),
+                      kCmdDurationBase + static_cast<UINT>(i) + 1, label);
     }
     ::AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(durations), L"显示时长");
 
@@ -817,10 +823,11 @@ void App::HandleTrayCommand(UINT command) {
         RequestExit();
         return;
     }
-    if (command > kCmdDurationBase && command <= kCmdDurationBase + 60) {
-        config_.hideDelayMs = static_cast<int>(command - kCmdDurationBase) * 1000;
+    if (command > kCmdDurationBase && command <= kCmdDurationBase + 4) {
+        const int durationsMs[] = {500, 1000, 2000, 5000};
+        config_.hideDelayMs = durationsMs[command - kCmdDurationBase - 1];
         config_.Save();
-        log::Write(L"显示时长调整为 %d 秒", config_.hideDelayMs / 1000);
+        log::Write(L"显示时长调整为 %d ms", config_.hideDelayMs);
     }
 }
 
