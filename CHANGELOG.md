@@ -2,6 +2,18 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.5] - 2026-10-30
+
+### 变更
+
+- **提示窗默认位置改为与光标同一水平线**：内容块垂直中心对齐光标垂直中心，放在光标右侧；右侧放不下时翻到左侧，垂直仍然对齐。上下空间不足时只贴边收敛，不再翻到光标上方 / 下方，避免“跑到离光标很远”的观感。
+- 移除 `offsetY` 配置项（垂直位置由光标决定），旧配置里的 `offsetY` 会在下次保存时自动删除。
+
+### 修复
+
+- **QQ 中提示窗离光标很远**：QQ 是 Electron 应用，没有标准光标；UIA 对折叠选区返回的矩形不是光标位置（实测 ProseMirror 编辑器返回的是工具栏上一个 21×21 方块，位于窗口最右侧），原来直接采用就会把提示窗画到那里。现在会校验「光标矩形必须落在焦点控件矩形内」，不通过时退化为输入框左上角，提示窗回到输入框内。
+- 新增 `core/WindowAnchor.h` 之外的纯逻辑模块 `platform/UiaGeometry.h`，把上述判定抽出来做单元测试（QQ 的真实坐标已作为用例）。
+
 ## [0.1.4] - 2026-10-30
 
 ### 修复
@@ -77,7 +89,8 @@
 - 浏览器可编辑区域依赖 UIA 的 `IsReadOnly` 属性，个别网页编辑器可能误判。
 - 高权限窗口（管理员程序）在普通权限下可能无法读取光标信息。
 
-[0.1.0]: https://github.com/imetip/imetip/releases/tag/v0.1.0
-[0.1.1]: https://github.com/imetip/imetip/releases/tag/v0.1.1
+[0.1.5]: https://github.com/imetip/imetip/releases/tag/v0.1.5
 [0.1.4]: https://github.com/imetip/imetip/releases/tag/v0.1.4
 [0.1.2]: https://github.com/imetip/imetip/releases/tag/v0.1.2
+[0.1.1]: https://github.com/imetip/imetip/releases/tag/v0.1.1
+[0.1.0]: https://github.com/imetip/imetip/releases/tag/v0.1.0

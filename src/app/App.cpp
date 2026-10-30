@@ -512,9 +512,10 @@ void App::PerformCheck(bool slowUia) {
     case IndicatorAction::Refresh:
         ShowIndicator(snapshot, state);
         ::SetTimer(window_, kTimerHide, static_cast<UINT>(config_.hideDelayMs), nullptr);
-        log::Write(L"显示指示窗：%s%s%s%s%s", state.chinese ? L"中" : L"英", state.capsLock ? L" + A" : L"",
-                   snapshot.viaUia ? L"（UIA 光标）" : L"", snapshot.viaAnchor ? L"（记忆位置）" : L"",
-                   snapshot.imeInferred ? L"（状态推断）" : L"");
+        log::Write(L"显示指示窗：%s%s%s%s%s 光标=(%ld,%ld,%ld,%ld)", state.chinese ? L"中" : L"英",
+                   state.capsLock ? L" + A" : L"", snapshot.viaUia ? L"（UIA 光标）" : L"",
+                   snapshot.viaAnchor ? L"（记忆位置）" : L"", snapshot.imeInferred ? L"（状态推断）" : L"",
+                   snapshot.caret.left, snapshot.caret.top, snapshot.caret.right, snapshot.caret.bottom);
         break;
 
     case IndicatorAction::Hide:
@@ -684,7 +685,7 @@ void App::ShowIndicator(const InputSnapshot& snapshot, const IndicatorState& sta
 
     const UINT dpiValue = dpi::ForMonitor(monitor);
     indicator_.Present(IndicatorModel{state.chinese, state.capsLock}, snapshot.caret, workArea, config_.offsetX,
-                       config_.offsetY, dpiValue);
+                       dpiValue);
 }
 
 void App::SetPaused(bool paused) {

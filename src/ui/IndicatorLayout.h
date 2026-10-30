@@ -7,19 +7,20 @@ namespace imetip {
 struct IndicatorMetrics {
     int block = 32;  // 单个色块边长（物理像素）
     int gap = 5;     // 色块间距
-    int offsetX = 8; // 相对光标右边缘的水平偏移
-    int offsetY = 8; // 相对光标上边缘的垂直偏移
+    int offsetX = 8; // 相对光标边缘的水平间距
     int shadow = 5;  // 阴影内边距
     int count = 1;   // 色块数量：1（仅中/英）或 2（中/英 + A）
 };
 
 struct IndicatorPlacement {
-    RECT window{};      // 含阴影的窗口矩形（物理像素）
-    bool flippedX = false;
-    bool flippedY = false;
+    RECT window{};         // 含阴影的窗口矩形（物理像素）
+    bool flippedX = false; // 右侧放不下，改放到光标左侧
+    bool clampedY = false; // 垂直方向被工作区边界修正（不再严格对齐光标中线）
 };
 
-// 计算指示窗位置：优先放在光标右上方，越界时翻转到左上 / 右下并在工作区内收敛。
+// 计算指示窗位置。
+// 默认与光标**同一水平线**：色块垂直中心对齐光标垂直中心，放在光标右侧 offsetX 处；
+// 右侧放不下时翻到左侧，仍保持同一水平线；垂直方向只做贴边收敛，不翻到另一行。
 // 纯整数运算，便于单元测试。
 inline IndicatorPlacement ComputePlacement(const RECT& caret, const RECT& work, const IndicatorMetrics& metrics) {
     IndicatorPlacement result;
@@ -34,25 +35,14 @@ inline IndicatorPlacement ComputePlacement(const RECT& caret, const RECT& work, 
     const int caretTop = caret.top;
     const int caretRight = caret.right > caret.left ? caret.right : caret.left + 1;
     const int caretBottom = caret.bottom > caret.top ? caret.bottom : caret.top + 1;
+    const int caretHeight = caretBottom - caretTop;
 
-    // 内容块左上角（不含阴影）
+    // 内容块左上角（不含阴影）：垂直居中对齐光标
     int innerX = caretRight + metrics.offsetX;
-    int innerY = caretTop - metrics.offsetY - innerHeight;
-
-    if (innerY < work.top) {
-        // 上方空间不足：翻转到光标下方
-        innerY = caretBottom + metrics.offsetY;
-        result.flippedY = true;
-    }
-    if (innerY + innerHeight > work.bottom) {
-        innerY = work.bottom - innerHeight;
-    }
-    if (innerY < work.top) {
-        innerY = work.top;
-    }
+    int innerY = caretTop + (caretHeight - innerHeight) / 2;
 
     if (innerX + innerWidth > work.right) {
-        // 右侧空间不足：翻转到光标左侧
+        // 右侧空间不足：翻转到光标左侧，垂直仍然对齐光标中线
         innerX = caretLeft - metrics.offsetX - innerWidth;
         result.flippedX = true;
     }
@@ -61,6 +51,15 @@ inline IndicatorPlacement ComputePlacement(const RECT& caret, const RECT& work, 
     }
     if (innerX + innerWidth > work.right) {
         innerX = work.right - innerWidth;
+    }
+
+    if (innerY + innerHeight > work.bottom) {
+        innerY = work.bottom - innerHeight;
+        result.clampedY = true;
+    }
+    if (innerY < work.top) {
+        innerY = work.top;
+        result.clampedY = true;
     }
 
     result.window.left = innerX - metrics.shadow;

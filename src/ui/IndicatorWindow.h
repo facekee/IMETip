@@ -12,9 +12,8 @@ public:
     bool Create(HINSTANCE instance);
     void Destroy();
 
-    // 绘制并显示，同时按光标位置完成定位与边界翻转。
-    void Present(const IndicatorModel& model, const RECT& caret, const RECT& workArea, int offsetX, int offsetY,
-                 UINT dpiValue);
+    // 绘制并显示，同时按光标位置完成定位与边界翻转（默认与光标同一水平线）。
+    void Present(const IndicatorModel& model, const RECT& caret, const RECT& workArea, int offsetX, UINT dpiValue);
     void Hide(bool animate);
 
     bool IsVisible() const { return visible_; }

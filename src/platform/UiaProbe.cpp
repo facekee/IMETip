@@ -8,6 +8,8 @@
 
 #include <chrono>
 
+#include "platform/UiaGeometry.h"
+
 using Microsoft::WRL::ComPtr;
 
 namespace imetip {
@@ -49,6 +51,13 @@ bool RectFromRange(IUIAutomationTextRange* range, RECT& out) {
     return found;
 }
 
+// 光标矩形与元素矩形是否有交集。
+// Chromium / Electron 在折叠选区（纯光标）时可能返回完全无关元素的矩形，
+// 例如 QQ 的 ProseMirror 编辑器会把工具栏上某个 21x21 的方块当成光标。
+bool CaretInsideElement(const RECT& caret, const RECT& element) {
+    return IsCaretRectTrustworthy(caret, element);
+}
+
 UiaCaretInfo QueryFocusedElement(IUIAutomation* automation) {
     UiaCaretInfo info;
     if (!automation) return info;
@@ -77,6 +86,9 @@ UiaCaretInfo QueryFocusedElement(IUIAutomation* automation) {
     CONTROLTYPEID controlType = 0;
     element->get_CurrentControlType(&controlType);
     info.controlType = static_cast<long>(controlType);
+
+    RECT elementRect{};
+    element->get_CurrentBoundingRectangle(&elementRect);
 
     ComPtr<IUIAutomationTextPattern> textPattern;
     if (FAILED(element->GetCurrentPatternAs(UIA_TextPatternId, IID_PPV_ARGS(&textPattern))) || !textPattern) {
@@ -111,18 +123,45 @@ UiaCaretInfo QueryFocusedElement(IUIAutomation* automation) {
     }
 
     RECT caret{};
-    if (!RectFromRange(range.Get(), caret)) {
+    bool haveCaret = false;
+    if (RectFromRange(range.Get(), caret)) {
+        haveCaret = CaretInsideElement(caret, elementRect);
+    }
+
+    if (!haveCaret) {
         // 折叠选区（纯光标）部分应用不回传矩形，退化为按字符扩展后取首字符矩形。
         ComPtr<IUIAutomationTextRange> expanded;
-        if (FAILED(range->Clone(&expanded)) || !expanded) {
-            return info;
+        if (SUCCEEDED(range->Clone(&expanded)) && expanded &&
+            SUCCEEDED(expanded->ExpandToEnclosingUnit(TextUnit_Character))) {
+            RECT expandedRect{};
+            if (RectFromRange(expanded.Get(), expandedRect) && CaretInsideElement(expandedRect, elementRect)) {
+                caret = expandedRect;
+                haveCaret = true;
+            }
         }
-        if (FAILED(expanded->ExpandToEnclosingUnit(TextUnit_Character))) {
-            return info;
+    }
+
+    if (!haveCaret) {
+        // 仍然拿不到可信矩形：若焦点元素本身就是一个输入框，退化为它的左上角，
+        // 至少保证提示窗出现在输入框里，而不是跑到别处。
+        HWND foreground = ::GetForegroundWindow();
+        DWORD foregroundPid = 0;
+        if (foreground) {
+            ::GetWindowThreadProcessId(foreground, &foregroundPid);
         }
-        if (!RectFromRange(expanded.Get(), caret)) {
-            return info;
+        RECT windowRect{};
+        if (foregroundPid == static_cast<DWORD>(processId) && foreground &&
+            ::GetWindowRect(::GetAncestor(foreground, GA_ROOT), &windowRect) &&
+            IsEditorLikeRect(elementRect, windowRect.right - windowRect.left, windowRect.bottom - windowRect.top)) {
+            const int x = elementRect.left + 8;
+            const int y = elementRect.top + (elementRect.bottom - elementRect.top) / 5;
+            caret = RECT{x, y, x + 1, y + 2};
+            haveCaret = true;
         }
+    }
+
+    if (!haveCaret) {
+        return info;
     }
 
     info.ok = true;

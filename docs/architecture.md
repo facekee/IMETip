@@ -150,11 +150,11 @@ stateDiagram-v2
 
 ### 定位
 
-`ComputePlacement` 为纯整数算法：
+`ComputePlacement` 为纯整数算法，默认**与光标同一水平线**：
 
-1. 默认放到光标右上：内容块左上角 = `(caret.right + offsetX, caret.top - offsetY - blockHeight)`。
-2. 上方越界 → 翻转到光标下方（`caret.bottom + offsetY`）。
-3. 右侧越界 → 翻转到光标左侧（`caret.left - offsetX - width`）。
+1. 内容块垂直中心对齐光标垂直中心：`innerY = caret.top + (caretHeight - blockHeight) / 2`，水平放在光标右侧 `caret.right + offsetX`。
+2. 右侧越界 → 翻转到光标左侧（`caret.left - offsetX - width`），垂直仍然对齐光标中线。
+3. 上下越界 → 贴住工作区边界收敛（不翻到另一行，避免提示窗跑到离光标很远的地方）。
 4. 最后把含阴影的窗口矩形整体收敛到显示器工作区，保证完整可见。
 
 窗口尺寸随色块数量自适应（1 块或 2 块），不预留固定空位，避免出现“透明空洞”。

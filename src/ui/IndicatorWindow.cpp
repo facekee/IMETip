@@ -39,7 +39,7 @@ void IndicatorWindow::Destroy() {
 }
 
 void IndicatorWindow::Present(const IndicatorModel& model, const RECT& caret, const RECT& workArea, int offsetX,
-                              int offsetY, UINT dpiValue) {
+                              UINT dpiValue) {
     if (!window_) return;
 
     ::KillTimer(window_, kFadeTimer);
@@ -54,7 +54,6 @@ void IndicatorWindow::Present(const IndicatorModel& model, const RECT& caret, co
     metrics.block = style_.block;
     metrics.gap = style_.gap;
     metrics.offsetX = dpi::Scale(offsetX, dpiValue);
-    metrics.offsetY = dpi::Scale(offsetY, dpiValue);
     metrics.shadow = style_.shadow;
     metrics.count = model.capsLock ? 2 : 1;
 

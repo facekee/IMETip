@@ -66,7 +66,6 @@ Config Config::Load() {
 
     config.hideDelayMs = ::GetPrivateProfileIntW(L"indicator", L"hideDelayMs", config.hideDelayMs, path);
     config.offsetX = ::GetPrivateProfileIntW(L"indicator", L"offsetX", config.offsetX, path);
-    config.offsetY = ::GetPrivateProfileIntW(L"indicator", L"offsetY", config.offsetY, path);
     config.debounceMs = ::GetPrivateProfileIntW(L"indicator", L"debounceMs", config.debounceMs, path);
     config.fadeOut = ::GetPrivateProfileIntW(L"indicator", L"fadeOut", config.fadeOut ? 1 : 0, path) != 0;
     config.startPaused = ::GetPrivateProfileIntW(L"startup", L"startPaused", 0, path) != 0;
@@ -77,7 +76,6 @@ Config Config::Load() {
 
     config.hideDelayMs = Clamp(config.hideDelayMs, 1000, 30000);
     config.offsetX = Clamp(config.offsetX, 0, 64);
-    config.offsetY = Clamp(config.offsetY, 0, 64);
     config.debounceMs = Clamp(config.debounceMs, 20, 200);
     return config;
 }
@@ -91,8 +89,8 @@ void Config::Save() const {
     ::WritePrivateProfileStringW(L"indicator", L"hideDelayMs", buffer, path);
     ::swprintf_s(buffer, L"%d", offsetX);
     ::WritePrivateProfileStringW(L"indicator", L"offsetX", buffer, path);
-    ::swprintf_s(buffer, L"%d", offsetY);
-    ::WritePrivateProfileStringW(L"indicator", L"offsetY", buffer, path);
+    // 旧版本的垂直偏移已废弃（布局改为与光标同一水平线），顺手删掉残留键
+    ::WritePrivateProfileStringW(L"indicator", L"offsetY", nullptr, path);
     ::swprintf_s(buffer, L"%d", debounceMs);
     ::WritePrivateProfileStringW(L"indicator", L"debounceMs", buffer, path);
     ::WritePrivateProfileStringW(L"indicator", L"fadeOut", fadeOut ? L"1" : L"0", path);
