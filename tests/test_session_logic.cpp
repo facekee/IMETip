@@ -87,6 +87,18 @@ void RunSessionLogicTests() {
     }
 
     {
+        // 窗口滚动导致的外部隐藏：会话保留，状态变化后仍可重新弹出
+        SessionLogic session;
+        session.OnProbe(true, chinese, 0x1000);
+        CHECK(session.OnExternalHide().action == IndicatorAction::Hide);
+        CHECK(!session.Visible());
+        CHECK(session.SessionActive());
+        CHECK(session.OnExternalHide().action == IndicatorAction::None);
+        CHECK(session.OnProbe(true, chinese, 0x1000).action == IndicatorAction::None);
+        CHECK(session.OnProbe(true, english, 0x1000).action == IndicatorAction::Show);
+    }
+
+    {
         // 暂停时 Reset 后不残留会话
         SessionLogic session;
         session.OnProbe(true, chinese, 0x1000);

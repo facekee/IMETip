@@ -9,8 +9,8 @@ IDI_APP ICON "IMETip.ico"
 1 RT_MANIFEST "IMETip.manifest"
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,1,0,0
- PRODUCTVERSION 0,1,0,0
+ FILEVERSION 0,1,1,0
+ PRODUCTVERSION 0,1,1,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS 0x40004L
@@ -23,12 +23,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "IMETip contributors"
             VALUE "FileDescription", "IMETip - 输入法状态提示"
-            VALUE "FileVersion", "0.1.0.0"
+            VALUE "FileVersion", "0.1.1.0"
             VALUE "InternalName", "IMETip"
             VALUE "LegalCopyright", "Copyright (C) 2026 IMETip contributors"
             VALUE "OriginalFilename", "IMETip.exe"
             VALUE "ProductName", "IMETip"
-            VALUE "ProductVersion", "0.1.0"
+            VALUE "ProductVersion", "0.1.1"
         END
     END
     BLOCK "VarFileInfo"

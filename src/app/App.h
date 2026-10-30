@@ -59,6 +59,7 @@ private:
     bool paused_ = false;
     bool silent_ = false;
     bool exiting_ = false;
+    bool retried_ = false; // 本次点击/焦点是否已做过一次性复查
     UINT taskbarCreatedMessage_ = 0;
 };
 

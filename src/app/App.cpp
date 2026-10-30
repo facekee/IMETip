@@ -23,6 +23,7 @@ constexpr UINT kMsgTray = WM_APP + 18;
 
 constexpr UINT_PTR kTimerDebounce = 1;
 constexpr UINT_PTR kTimerHide = 2;
+constexpr UINT_PTR kTimerRetry = 3;
 
 constexpr UINT kCmdEnable = 1001;
 constexpr UINT kCmdPause = 1002;
@@ -181,6 +182,7 @@ void App::Shutdown() {
     if (window_) {
         ::KillTimer(window_, kTimerDebounce);
         ::KillTimer(window_, kTimerHide);
+        ::KillTimer(window_, kTimerRetry);
     }
 
     indicator_.Hide(false);
@@ -286,6 +288,10 @@ LRESULT App::HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lPar
             if (session_.OnHideTimeout().action == IndicatorAction::Hide) {
                 indicator_.Hide(config_.fadeOut);
             }
+        } else if (wParam == kTimerRetry) {
+            // 点击/焦点之后的一次性复查（应对目标应用异步创建光标）
+            ::KillTimer(window, kTimerRetry);
+            PerformCheck();
         }
         return 0;
 
@@ -311,6 +317,20 @@ LRESULT App::HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lPar
 
 void App::OnTrigger(InputTrigger trigger) {
     if (paused_ || exiting_) return;
+
+    if (trigger == InputTrigger::Scroll) {
+        // 窗口滚动时指示窗立即消失；会话保留，后续状态变化仍可重新显示。
+        if (session_.OnExternalHide().action == IndicatorAction::Hide) {
+            ::KillTimer(window_, kTimerHide);
+            ::KillTimer(window_, kTimerRetry);
+            indicator_.Hide(false);
+        }
+        return;
+    }
+
+    if (trigger != InputTrigger::Key) {
+        retried_ = false;
+    }
     // 按键事件只用于输入态会话内的状态复查，非输入态不因按键而检查。
     if (trigger == InputTrigger::Key && !session_.SessionActive()) return;
     ScheduleCheck();
@@ -335,6 +355,12 @@ void App::PerformCheck() {
         if (indicator_.IsVisible()) {
             indicator_.Hide(config_.fadeOut);
         }
+
+        // 部分应用（如微信）在点击后才异步创建光标，这里追加一次 150ms 后的复查。
+        if (!retried_) {
+            retried_ = true;
+            ::SetTimer(window_, kTimerRetry, 150, nullptr);
+        }
         return;
     }
 
@@ -344,8 +370,8 @@ void App::PerformCheck() {
     case IndicatorAction::Refresh:
         ShowIndicator(snapshot, state);
         ::SetTimer(window_, kTimerHide, static_cast<UINT>(config_.hideDelayMs), nullptr);
-        log::Write(L"显示指示窗：%s%s%s", state.chinese ? L"中" : L"英", state.capsLock ? L" + A" : L"",
-                   snapshot.viaUia ? L"（UIA）" : L"");
+        log::Write(L"显示指示窗：%s%s%s%s", state.chinese ? L"中" : L"英", state.capsLock ? L" + A" : L"",
+                   snapshot.viaUia ? L"（UIA 光标）" : L"", snapshot.imeFallback ? L"（IME 回退）" : L"");
         break;
 
     case IndicatorAction::Hide:
@@ -387,6 +413,7 @@ void App::SetPaused(bool paused) {
         if (window_) {
             ::KillTimer(window_, kTimerHide);
             ::KillTimer(window_, kTimerDebounce);
+            ::KillTimer(window_, kTimerRetry);
         }
         session_.Reset();
         indicator_.Hide(false);

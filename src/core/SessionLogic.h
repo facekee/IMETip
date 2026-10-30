@@ -75,6 +75,14 @@ public:
         return {IndicatorAction::Hide, false};
     }
 
+    // 外部原因要求立即隐藏（窗口滚动等），会话仍然有效，
+    // 后续状态变化仍可重新弹出。
+    SessionDecision OnExternalHide() {
+        if (!visible_) return {};
+        visible_ = false;
+        return {IndicatorAction::Hide, false};
+    }
+
     // 输入态结束（焦点离开 / 前台切换 / 光标消失 / 暂停）。
     SessionDecision EndSession() {
         const bool wasVisible = visible_;

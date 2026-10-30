@@ -9,9 +9,10 @@ enum class InputTrigger {
     Focus,      // 焦点变化
     Click,      // 鼠标点击
     Key,        // 按键（仅用于输入态内的状态复查）
+    Scroll,     // 滚轮 / 翻页 / 窗口开始滚动
 };
 
-// 事件源：WinEvent 钩子（前台切换 / 焦点）+ 低级鼠标 / 键盘钩子（点击 / 按键）。
+// 事件源：WinEvent 钩子（前台切换 / 焦点 / 开始滚动）+ 低级鼠标 / 键盘钩子。
 // 不做任何定时轮询，所有检查均由系统事件触发，最终以窗口消息通知宿主。
 class EventMonitor {
 public:
@@ -40,12 +41,9 @@ private:
     bool enabled_ = false;
     HWINEVENTHOOK foregroundHook_ = nullptr;
     HWINEVENTHOOK focusHook_ = nullptr;
+    HWINEVENTHOOK scrollHook_ = nullptr;
     HHOOK mouseHook_ = nullptr;
     HHOOK keyboardHook_ = nullptr;
-
-    bool shiftDown_ = false;
-    bool shiftUsed_ = false;
-    DWORD shiftDownTick_ = 0;
 };
 
 } // namespace imetip

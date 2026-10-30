@@ -14,6 +14,7 @@ struct InputSnapshot {
     bool chinese = false;
     bool capsLock = false;
     bool viaUia = false;
+    bool imeFallback = false; // IME 状态来自默认 IME 窗口回退
     RECT caret{};
     HWND focusWindow = nullptr;
     DWORD threadId = 0;

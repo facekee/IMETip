@@ -1,6 +1,7 @@
 #include "core/InputProbe.h"
 
 #include "core/ImeState.h"
+#include "util/Log.h"
 
 namespace imetip {
 namespace {
@@ -66,28 +67,48 @@ InputSnapshot InputProbe::Probe(HWND ownWindow) {
     bool haveCaret = false;
     RECT caret{};
     HWND focusWindow = foreground;
+    HWND caretWindow = nullptr;
 
     if (!IsNonInputWindowClass(foreground)) {
         GUITHREADINFO info{};
         info.cbSize = sizeof(info);
-        if (::GetGUIThreadInfo(threadId, &info) && info.hwndCaret) {
-            HWND target = info.hwndFocus ? info.hwndFocus : foreground;
-            const bool caretRectUsable = info.rcCaret.bottom > info.rcCaret.top;
-            if (caretRectUsable && !IsReadOnlyEditControl(target) && !IsNonInputWindowClass(target)) {
-                POINT topLeft{info.rcCaret.left, info.rcCaret.top};
-                POINT bottomRight{info.rcCaret.right, info.rcCaret.bottom};
-                if (::ClientToScreen(info.hwndCaret, &topLeft) && ::ClientToScreen(info.hwndCaret, &bottomRight)) {
-                    caret = RECT{topLeft.x, topLeft.y, bottomRight.x, bottomRight.y};
-                    focusWindow = target;
-                    haveCaret = true;
+        if (::GetGUIThreadInfo(threadId, &info)) {
+            // 焦点可能落在同进程的另一个 GUI 线程上（内嵌编辑器等），
+            // 此时前台线程没有光标，需要再查焦点窗口所在线程。
+            if (!info.hwndCaret && info.hwndFocus) {
+                DWORD focusProcessId = 0;
+                const DWORD focusThreadId = ::GetWindowThreadProcessId(info.hwndFocus, &focusProcessId);
+                if (focusThreadId != 0 && focusThreadId != threadId && focusProcessId == processId) {
+                    GUITHREADINFO focusInfo{};
+                    focusInfo.cbSize = sizeof(focusInfo);
+                    if (::GetGUIThreadInfo(focusThreadId, &focusInfo) && focusInfo.hwndCaret) {
+                        info = focusInfo;
+                    }
+                }
+            }
+
+            if (info.hwndCaret) {
+                HWND target = info.hwndFocus ? info.hwndFocus : foreground;
+                const bool caretRectUsable = info.rcCaret.bottom > info.rcCaret.top;
+                if (caretRectUsable && !IsReadOnlyEditControl(target) && !IsNonInputWindowClass(target)) {
+                    POINT topLeft{info.rcCaret.left, info.rcCaret.top};
+                    POINT bottomRight{info.rcCaret.right, info.rcCaret.bottom};
+                    if (::ClientToScreen(info.hwndCaret, &topLeft) &&
+                        ::ClientToScreen(info.hwndCaret, &bottomRight)) {
+                        caret = RECT{topLeft.x, topLeft.y, bottomRight.x, bottomRight.y};
+                        focusWindow = target;
+                        caretWindow = info.hwndCaret;
+                        haveCaret = true;
+                    }
                 }
             }
         }
     }
 
+    UiaCaretInfo uiaInfo{};
     if (!haveCaret) {
         // 浏览器 / 终端等不使用标准光标的场景，走 UIA 文本光标回退（带超时）。
-        const UiaCaretInfo uiaInfo = uia_.Query(70);
+        uiaInfo = uia_.Query(70);
         if (uiaInfo.ok && uiaInfo.editable) {
             caret = uiaInfo.caret;
             haveCaret = true;
@@ -96,6 +117,13 @@ InputSnapshot InputProbe::Probe(HWND ownWindow) {
     }
 
     if (!haveCaret) {
+        if (log::Enabled()) {
+            // 只记录窗口类名与控件类型，便于定位不支持的应用，不记录任何输入内容。
+            wchar_t className[128]{};
+            ::GetClassNameW(foreground, className, ARRAYSIZE(className));
+            log::Write(L"未检测到光标：foreground=%s uiaOk=%d uiaType=%ld", className, uiaInfo.ok ? 1 : 0,
+                       uiaInfo.controlType);
+        }
         return snapshot;
     }
 
@@ -107,8 +135,9 @@ InputSnapshot InputProbe::Probe(HWND ownWindow) {
     snapshot.focusWindow = focusWindow;
     snapshot.sessionKey = reinterpret_cast<std::uintptr_t>(focusWindow);
 
-    const ImeSnapshot ime = QueryImeState(threadId, focusWindow);
+    const ImeSnapshot ime = QueryImeState(threadId, focusWindow, caretWindow);
     snapshot.stateKnown = ime.valid;
+    snapshot.imeFallback = ime.viaFallback;
     if (ime.valid) {
         lastChinese_ = ime.chinese;
         snapshot.chinese = ime.chinese;
