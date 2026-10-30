@@ -3,6 +3,7 @@
 #include "ui/GdiplusUtil.h"
 
 #include <algorithm>
+#include <cstring>
 
 using namespace Gdiplus;
 
@@ -38,6 +39,21 @@ void ApplyAlpha(Bitmap& bitmap, float alpha) {
         }
     }
     bitmap.UnlockBits(&data);
+}
+
+// 把矩形区域清成完全透明。
+// GDI+ 会跳过 alpha 为 0 的填充，所以这里直接改像素；用于保证两块之间一点残白都不留。
+void ClearRect(Bitmap& target, const Rect& rect) {
+    if (rect.Width <= 0 || rect.Height <= 0) return;
+    BitmapData data{};
+    if (target.LockBits(&rect, ImageLockModeRead | ImageLockModeWrite, PixelFormat32bppPARGB, &data) != Ok) {
+        return;
+    }
+    for (int y = 0; y < rect.Height; ++y) {
+        auto* row = static_cast<BYTE*>(data.Scan0) + static_cast<ptrdiff_t>(y) * data.Stride;
+        memset(row, 0, static_cast<size_t>(rect.Width) * 4);
+    }
+    target.UnlockBits(&data);
 }
 
 void DrawShadow(Graphics& graphics, float x, float y, float width, float height, float radius) {
@@ -92,10 +108,7 @@ void DrawBlock(Graphics& graphics, float x, float y, float size, float radius, b
     LinearGradientBrush fill(PointF(x, y), PointF(x, y + size), top, bottom);
     graphics.FillPath(&fill, &path);
 
-    GraphicsPath inner;
-    gfx::AddRoundRect(inner, RectF(x + 1.0f, y + 1.0f, size - 2.0f, size - 2.0f), std::max(1.0f, radius - 1.0f));
-    Pen border(Color(48, 255, 255, 255), 1.0f);
-    graphics.DrawPath(&border, &inner);
+    // 不描白色内边：两块并排时，两圈半透明白边会在中间叠成一条发白的缝。
 
     const wchar_t* glyph = capsBlock ? L"A" : (chinese ? L"\u4E2D" : L"\u82F1");
     auto family = capsBlock ? gfx::PickFamily({L"Segoe UI", L"Arial", L"Microsoft YaHei UI"})
@@ -134,6 +147,12 @@ void RenderIndicator(Bitmap& target, const IndicatorModel& model, const Indicato
     for (int i = 0; i < count; ++i) {
         DrawBlock(graphics, inset + i * (block + gap), inset, block, static_cast<float>(style.radius), i == 1,
                   model.chinese);
+    }
+
+    // 两块之间的间隙按像素清零：确保中间没有任何半透明白/灰残留。
+    for (int i = 0; i + 1 < count; ++i) {
+        const int gapLeft = static_cast<int>(inset + (i + 1) * block + i * gap + 0.5f);
+        ClearRect(target, Rect(gapLeft, static_cast<int>(inset), style.gap, style.block));
     }
 
     if (alpha < 0.999f) {

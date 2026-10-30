@@ -2,6 +2,17 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.7] - 2026-10-30
+
+### 变更
+
+- **去掉「中 + A」「英 + A」两块之间的发白感**：每个色块原来有一圈 1px、约 19% 白的半透明描边，两块并排时两圈描边在中间叠成一条发白的缝。现在完全不再描白边，色块改用纯渐变。
+- **两块之间的间隙按像素清零**：渲染完成后直接把间隙区域的 alpha 写成 0，保证那里一点残留的半透明白/灰都没有（GDI+ 会跳过 alpha=0 的填充，所以走的是直接改像素）。
+
+### 说明
+
+- 间隙本身是透明的，透出的是背后的界面。如果希望两块完全连成一体（没有那道缝隙），把 `IndicatorStyle::gap` 调小即可。
+
 ## [0.1.6] - 2026-10-30
 
 ### 变更
@@ -96,6 +107,7 @@
 - 浏览器可编辑区域依赖 UIA 的 `IsReadOnly` 属性，个别网页编辑器可能误判。
 - 高权限窗口（管理员程序）在普通权限下可能无法读取光标信息。
 
+[0.1.7]: https://github.com/imetip/imetip/releases/tag/v0.1.7
 [0.1.6]: https://github.com/imetip/imetip/releases/tag/v0.1.6
 [0.1.5]: https://github.com/imetip/imetip/releases/tag/v0.1.5
 [0.1.4]: https://github.com/imetip/imetip/releases/tag/v0.1.4
