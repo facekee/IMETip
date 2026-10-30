@@ -74,6 +74,13 @@ Config Config::Load() {
     config.anchorEnabled = ::GetPrivateProfileIntW(L"indicator", L"anchorMode", 1, path) != 0;
     LoadAnchors(path, config.anchors);
 
+    // 布局版本迁移：0.1.6 起水平间距默认值由 8 调整为 32（约 4 倍）。
+    // 旧配置里没写过 layoutVersion 且仍是旧默认值时，按新默认值处理一次。
+    const int layoutVersion = ::GetPrivateProfileIntW(L"indicator", L"layoutVersion", 1, path);
+    if (layoutVersion < 2 && config.offsetX == 8) {
+        config.offsetX = 32;
+    }
+
     config.hideDelayMs = Clamp(config.hideDelayMs, 1000, 30000);
     config.offsetX = Clamp(config.offsetX, 0, 64);
     config.debounceMs = Clamp(config.debounceMs, 20, 200);
@@ -89,6 +96,7 @@ void Config::Save() const {
     ::WritePrivateProfileStringW(L"indicator", L"hideDelayMs", buffer, path);
     ::swprintf_s(buffer, L"%d", offsetX);
     ::WritePrivateProfileStringW(L"indicator", L"offsetX", buffer, path);
+    ::WritePrivateProfileStringW(L"indicator", L"layoutVersion", L"2", path);
     // 旧版本的垂直偏移已废弃（布局改为与光标同一水平线），顺手删掉残留键
     ::WritePrivateProfileStringW(L"indicator", L"offsetY", nullptr, path);
     ::swprintf_s(buffer, L"%d", debounceMs);

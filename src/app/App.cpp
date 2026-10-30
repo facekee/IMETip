@@ -744,7 +744,7 @@ void App::ShowTrayMenu(POINT point) {
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
 
     HMENU durations = ::CreatePopupMenu();
-    const int seconds[] = {3, 5, 8, 10};
+    const int seconds[] = {1, 2, 3, 5, 8, 10};
     for (int value : seconds) {
         wchar_t label[32]{};
         ::swprintf_s(label, L"%d 秒", value);

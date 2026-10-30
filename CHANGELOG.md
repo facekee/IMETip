@@ -2,6 +2,13 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.6] - 2026-10-30
+
+### 变更
+
+- **显示时长新增 1 秒 / 2 秒选项**：托盘菜单改为 1 / 2 / 3 / 5 / 8 / 10 秒，默认仍是 5 秒。
+- **提示窗与光标水平间距加大到约 4 倍**：`offsetX` 默认值 8 → 32（96 DPI 逻辑像素，高 DPI 下按比例放大），避免提示窗贴住正在输入的字符。旧配置里仍是旧默认值 8 的，会按 `layoutVersion` 迁移一次到 32；想自己调可改 `config.ini` 的 `offsetX`（0–64）。
+
 ## [0.1.5] - 2026-10-30
 
 ### 变更
@@ -89,6 +96,7 @@
 - 浏览器可编辑区域依赖 UIA 的 `IsReadOnly` 属性，个别网页编辑器可能误判。
 - 高权限窗口（管理员程序）在普通权限下可能无法读取光标信息。
 
+[0.1.6]: https://github.com/imetip/imetip/releases/tag/v0.1.6
 [0.1.5]: https://github.com/imetip/imetip/releases/tag/v0.1.5
 [0.1.4]: https://github.com/imetip/imetip/releases/tag/v0.1.4
 [0.1.2]: https://github.com/imetip/imetip/releases/tag/v0.1.2
