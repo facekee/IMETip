@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(IMETip VERSION 0.1.2 LANGUAGES CXX)
+project(IMETip VERSION 0.1.3 LANGUAGES CXX)
 
 if(NOT WIN32)
     message(FATAL_ERROR "IMETip 仅支持 Windows 平台（Win32 / GDI+ / UI Automation）")

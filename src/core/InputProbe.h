@@ -14,7 +14,8 @@ struct InputSnapshot {
     bool chinese = false;
     bool capsLock = false;
     bool viaUia = false;
-    bool imeInferred = false; // IME 状态为本地推断（系统接口读不到时按 Shift/Ctrl+Space 翻转）
+    bool imeInferred = false;    // IME 状态为本地推断（系统接口读不到时按 Shift/Ctrl+Space 翻转）
+    bool uiaTextAvailable = false; // 焦点元素是否提供 UIA 文本接口（决定能否用缓存光标兜底）
     RECT caret{};
     HWND focusWindow = nullptr;
     DWORD threadId = 0;

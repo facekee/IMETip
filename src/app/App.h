@@ -28,10 +28,11 @@ private:
     static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
 
     void ParseCommandLine(bool& startPaused, bool& silent, bool& logEnabled, bool& showVersion, bool& showHelp);
-    void OnTrigger(InputTrigger trigger);
+    void OnTrigger(InputTrigger trigger, LPARAM payload = 0);
     void ScheduleCheck();
     void PerformCheck(bool slowUia = false);
     void ShowIndicator(const InputSnapshot& snapshot, const IndicatorState& state);
+    bool CanUseStickyAnchor(const InputSnapshot& snapshot) const;
     void SetPaused(bool paused);
     void HandleTrayMessage(UINT event, int x, int y);
     void ShowTrayMenu(POINT point);
@@ -61,6 +62,12 @@ private:
     bool exiting_ = false;
     bool initialized_ = false; // 初始化完成（用于退出时安全落盘配置）
     int retryCount_ = 0;       // 本次点击/焦点已做过的一次性复查次数
+    RECT lastCaret_{};         // 最近一次检测到的光标矩形（用于判断“点击远离输入区”）
+    bool lastCaretValid_ = false;
+    HWND lastCaretWindow_ = nullptr; // 最近一次光标所在窗口
+    ULONGLONG lastCaretTick_ = 0;    // 最近一次检测到光标的时间
+    HWND stickyWindow_ = nullptr;    // 当前正沿用缓存锚点的窗口
+    bool farClick_ = false;          // 本次点击是否远离光标
     UINT taskbarCreatedMessage_ = 0;
 };
 

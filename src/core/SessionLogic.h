@@ -1,5 +1,7 @@
 #pragma once
 
+#include <windows.h>
+
 #include <cstdint>
 
 namespace imetip {
@@ -23,6 +25,14 @@ enum class IndicatorAction {
     Refresh, // 指示窗已显示，仅刷新内容并重置计时
     Hide,    // 隐藏指示窗
 };
+
+// 点击位置是否明显远离当前光标（用于识别“切换会话”这类操作）。
+// 单窗口应用（微信）切换聊天时焦点 HWND 不变，但点击位置离输入框很远。
+inline bool IsClickFarFromCaret(const RECT& caret, int x, int y, int threshold) {
+    const int dx = (x < caret.left) ? (caret.left - x) : ((x > caret.right) ? (x - caret.right) : 0);
+    const int dy = (y < caret.top) ? (caret.top - y) : ((y > caret.bottom) ? (y - caret.bottom) : 0);
+    return dx * dx + dy * dy > threshold * threshold;
+}
 
 struct SessionDecision {
     IndicatorAction action = IndicatorAction::None;
