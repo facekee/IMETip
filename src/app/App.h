@@ -30,7 +30,7 @@ private:
     void ParseCommandLine(bool& startPaused, bool& silent, bool& logEnabled, bool& showVersion, bool& showHelp);
     void OnTrigger(InputTrigger trigger);
     void ScheduleCheck();
-    void PerformCheck();
+    void PerformCheck(bool slowUia = false);
     void ShowIndicator(const InputSnapshot& snapshot, const IndicatorState& state);
     void SetPaused(bool paused);
     void HandleTrayMessage(UINT event, int x, int y);
@@ -59,7 +59,8 @@ private:
     bool paused_ = false;
     bool silent_ = false;
     bool exiting_ = false;
-    bool retried_ = false; // 本次点击/焦点是否已做过一次性复查
+    bool initialized_ = false; // 初始化完成（用于退出时安全落盘配置）
+    int retryCount_ = 0;       // 本次点击/焦点已做过的一次性复查次数
     UINT taskbarCreatedMessage_ = 0;
 };
 

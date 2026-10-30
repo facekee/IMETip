@@ -9,10 +9,19 @@ bool IsShiftKey(DWORD vk) {
     return vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT;
 }
 
+bool IsModifierKey(DWORD vk) {
+    return IsShiftKey(vk) || vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL || vk == VK_MENU ||
+           vk == VK_LMENU || vk == VK_RMENU || vk == VK_LWIN || vk == VK_RWIN;
+}
+
 // 翻页键属于明确的“滚动”意图；方向键可能只是移动光标，不做处理。
 bool IsScrollKey(DWORD vk) {
     return vk == VK_PRIOR || vk == VK_NEXT;
 }
+
+// 轻点 Shift（期间未输入其它字符）视为输入法中英文切换。
+// 判定的关键是“没有输入其它字符”，时长放宽到 1 秒，避免用户按得稍慢就漏判。
+constexpr DWORD kShiftTapMaxMs = 1000;
 
 } // namespace
 
@@ -136,15 +145,27 @@ LRESULT CALLBACK EventMonitor::KeyboardProc(int code, WPARAM wParam, LPARAM lPar
             const bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
             const bool isUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
 
+            if (isDown && IsShiftKey(vk)) {
+                monitor->shiftDown_ = true;
+                monitor->shiftUsed_ = false;
+                monitor->shiftDownTick_ = ::GetTickCount();
+            } else if (isDown && monitor->shiftDown_ && !IsModifierKey(vk)) {
+                // 按住 Shift 输入其它字符（大写字母等），本次不算切换动作
+                monitor->shiftUsed_ = true;
+            }
+
             if (isDown && vk == VK_CAPITAL) {
                 monitor->Notify(InputTrigger::Key);
             } else if (isUp && IsShiftKey(vk)) {
-                // Shift 是常见的输入法中英文切换键：抬起即复查一次状态。
-                // 这里只用于触发复查，不参与大小写判断（大小写只看 Caps Lock）。
-                monitor->Notify(InputTrigger::Key);
+                const bool tap = monitor->shiftDown_ && !monitor->shiftUsed_ &&
+                                 (::GetTickCount() - monitor->shiftDownTick_) <= kShiftTapMaxMs;
+                monitor->shiftDown_ = false;
+                if (tap) {
+                    monitor->Notify(InputTrigger::ImeToggle);
+                }
             } else if (isUp && vk == VK_SPACE) {
                 if ((::GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) {
-                    monitor->Notify(InputTrigger::Key);
+                    monitor->Notify(InputTrigger::ImeToggle);
                 }
             } else if (isDown && IsScrollKey(vk)) {
                 monitor->Notify(InputTrigger::Scroll);

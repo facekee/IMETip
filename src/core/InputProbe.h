@@ -10,11 +10,11 @@ namespace imetip {
 
 struct InputSnapshot {
     bool inputActive = false;
-    bool stateKnown = false; // IME 状态是否读取成功
+    bool stateKnown = false;  // IME 状态是否由系统接口真实读取到
     bool chinese = false;
     bool capsLock = false;
     bool viaUia = false;
-    bool imeFallback = false; // IME 状态来自默认 IME 窗口回退
+    bool imeInferred = false; // IME 状态为本地推断（系统接口读不到时按 Shift/Ctrl+Space 翻转）
     RECT caret{};
     HWND focusWindow = nullptr;
     DWORD threadId = 0;
@@ -27,13 +27,21 @@ public:
     bool Start();
     void Stop();
 
-    InputSnapshot Probe(HWND ownWindow);
+    // slowUia: 首次点击后的复查使用更长等待，给 UIA 首次加载提供程序留出时间。
+    InputSnapshot Probe(HWND ownWindow, bool slowUia = false);
 
-    bool LastKnownChinese() const { return lastChinese_; }
+    // 系统接口读不到 IME 状态时（TSF 应用），按 Shift / Ctrl+Space 的切换动作翻转本地状态。
+    void ToggleImeState();
+
+    // 启动时用上次退出前的状态初始化推断值。
+    void SetInitialChinese(bool chinese) { believedChinese_ = chinese; }
+
+    bool LastKnownChinese() const { return believedChinese_; }
 
 private:
     UiaProbe uia_;
-    bool lastChinese_ = true;
+    // 最近一次可信的中文/英文状态：真实读取优先，读不到时由 ToggleImeState 维护。
+    bool believedChinese_ = true;
 };
 
 } // namespace imetip

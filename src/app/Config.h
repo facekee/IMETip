@@ -14,6 +14,7 @@ struct Config {
     bool fadeOut = false;   // 隐藏时是否使用 200ms 淡出
     bool startPaused = false;
     bool logEnabled = false;
+    bool imeChinese = true; // 上次退出时的中英文状态（TSF 应用读不到状态时用于初始化推断值）
 
     static Config Load();
     void Save() const;

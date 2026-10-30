@@ -42,6 +42,7 @@ Config Config::Load() {
     config.fadeOut = ::GetPrivateProfileIntW(L"indicator", L"fadeOut", config.fadeOut ? 1 : 0, path) != 0;
     config.startPaused = ::GetPrivateProfileIntW(L"startup", L"startPaused", 0, path) != 0;
     config.logEnabled = ::GetPrivateProfileIntW(L"diagnostics", L"log", 0, path) != 0;
+    config.imeChinese = ::GetPrivateProfileIntW(L"indicator", L"imeChinese", 1, path) != 0;
 
     config.hideDelayMs = Clamp(config.hideDelayMs, 1000, 30000);
     config.offsetX = Clamp(config.offsetX, 0, 64);
@@ -64,6 +65,7 @@ void Config::Save() const {
     ::swprintf_s(buffer, L"%d", debounceMs);
     ::WritePrivateProfileStringW(L"indicator", L"debounceMs", buffer, path);
     ::WritePrivateProfileStringW(L"indicator", L"fadeOut", fadeOut ? L"1" : L"0", path);
+    ::WritePrivateProfileStringW(L"indicator", L"imeChinese", imeChinese ? L"1" : L"0", path);
     ::WritePrivateProfileStringW(L"startup", L"startPaused", startPaused ? L"1" : L"0", path);
     ::WritePrivateProfileStringW(L"diagnostics", L"log", logEnabled ? L"1" : L"0", path);
 }

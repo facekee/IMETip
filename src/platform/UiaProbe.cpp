@@ -183,11 +183,13 @@ void UiaProbe::ThreadMain() {
     ComPtr<IUIAutomation> automation;
     ::CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&automation));
     if (automation) {
-        // IUIAutomation2 提供事务/连接超时设置，避免目标应用无响应时长时间阻塞
+        // IUIAutomation2 提供事务/连接超时设置。
+        // 事务超时放宽到 200ms：首次访问某个应用的 UIA 提供程序需要加载，50ms 会直接失败。
+        // UI 线程的等待时间仍由 Query(timeoutMs) 控制（常规 70ms，复查 260ms）。
         ComPtr<IUIAutomation2> advanced;
         if (SUCCEEDED(automation.As(&advanced)) && advanced) {
-            advanced->put_ConnectionTimeout(50);
-            advanced->put_TransactionTimeout(50);
+            advanced->put_ConnectionTimeout(200);
+            advanced->put_TransactionTimeout(200);
         }
     }
 

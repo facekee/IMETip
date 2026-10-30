@@ -138,6 +138,7 @@ bool App::Initialize() {
     }
 
     probe_.Start();
+    probe_.SetInitialChinese(config_.imeChinese);
     events_.Start(instance_, window_, kMsgInputCheck);
 
     if (!events_.WinEventHooksInstalled() || !events_.MouseHookInstalled() || !events_.KeyboardHookInstalled()) {
@@ -158,6 +159,7 @@ bool App::Initialize() {
     }
     UpdateTrayVisuals();
     log::Write(L"初始化完成，状态：%s", paused_ ? L"已暂停" : L"运行中");
+    initialized_ = true;
     return true;
 }
 
@@ -175,6 +177,12 @@ void App::Shutdown() {
     exiting_ = true;
 
     log::Write(L"IMETip 退出");
+
+    // 记住退出时的中英文状态，供下次启动初始化推断值（TSF 应用读不到真实状态）
+    if (initialized_) {
+        config_.imeChinese = probe_.LastKnownChinese();
+        config_.Save();
+    }
 
     session_.Reset();
     events_.Stop();
@@ -289,9 +297,9 @@ LRESULT App::HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lPar
                 indicator_.Hide(config_.fadeOut);
             }
         } else if (wParam == kTimerRetry) {
-            // 点击/焦点之后的一次性复查（应对目标应用异步创建光标）
+            // 点击/焦点之后的一次性复查（应对目标应用异步创建光标、UIA 提供程序首次加载）
             ::KillTimer(window, kTimerRetry);
-            PerformCheck();
+            PerformCheck(true);
         }
         return 0;
 
@@ -328,8 +336,16 @@ void App::OnTrigger(InputTrigger trigger) {
         return;
     }
 
+    if (trigger == InputTrigger::ImeToggle) {
+        // Shift / Ctrl+Space：TSF 应用读不到输入法状态，按切换动作翻转本地状态后立即刷新。
+        if (!session_.SessionActive()) return;
+        probe_.ToggleImeState();
+        ScheduleCheck();
+        return;
+    }
+
     if (trigger != InputTrigger::Key) {
-        retried_ = false;
+        retryCount_ = 0;
     }
     // 按键事件只用于输入态会话内的状态复查，非输入态不因按键而检查。
     if (trigger == InputTrigger::Key && !session_.SessionActive()) return;
@@ -343,10 +359,10 @@ void App::ScheduleCheck() {
     ::SetTimer(window_, kTimerDebounce, static_cast<UINT>(config_.debounceMs), nullptr);
 }
 
-void App::PerformCheck() {
+void App::PerformCheck(bool slowUia) {
     if (paused_ || exiting_) return;
 
-    const InputSnapshot snapshot = probe_.Probe(window_);
+    const InputSnapshot snapshot = probe_.Probe(window_, slowUia);
     const IndicatorState state{snapshot.chinese, snapshot.capsLock};
 
     if (!snapshot.inputActive) {
@@ -356,10 +372,11 @@ void App::PerformCheck() {
             indicator_.Hide(config_.fadeOut);
         }
 
-        // 部分应用（如微信）在点击后才异步创建光标，这里追加一次 150ms 后的复查。
-        if (!retried_) {
-            retried_ = true;
-            ::SetTimer(window_, kTimerRetry, 150, nullptr);
+        // 部分应用（如微信 Qt 输入框）在点击后才异步创建光标，UIA 提供程序首次加载也较慢，
+        // 这里追加两次一次性复查：200ms 与 600ms 各一次。
+        if (retryCount_ < 2) {
+            ++retryCount_;
+            ::SetTimer(window_, kTimerRetry, retryCount_ == 1 ? 200 : 600, nullptr);
         }
         return;
     }
@@ -371,7 +388,7 @@ void App::PerformCheck() {
         ShowIndicator(snapshot, state);
         ::SetTimer(window_, kTimerHide, static_cast<UINT>(config_.hideDelayMs), nullptr);
         log::Write(L"显示指示窗：%s%s%s%s", state.chinese ? L"中" : L"英", state.capsLock ? L" + A" : L"",
-                   snapshot.viaUia ? L"（UIA 光标）" : L"", snapshot.imeFallback ? L"（IME 回退）" : L"");
+                   snapshot.viaUia ? L"（UIA 光标）" : L"", snapshot.imeInferred ? L"（状态推断）" : L"");
         break;
 
     case IndicatorAction::Hide:

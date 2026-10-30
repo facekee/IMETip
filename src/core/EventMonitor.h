@@ -8,7 +8,8 @@ enum class InputTrigger {
     Foreground, // 前台窗口切换
     Focus,      // 焦点变化
     Click,      // 鼠标点击
-    Key,        // 按键（仅用于输入态内的状态复查）
+    Key,        // 大小写相关按键（Caps Lock）
+    ImeToggle,  // 中英文切换动作（Shift 轻点 / Ctrl+Space）
     Scroll,     // 滚轮 / 翻页 / 窗口开始滚动
 };
 
@@ -44,6 +45,11 @@ private:
     HWINEVENTHOOK scrollHook_ = nullptr;
     HHOOK mouseHook_ = nullptr;
     HHOOK keyboardHook_ = nullptr;
+
+    // Shift 轻点判定（用于识别“按 Shift 切中英文”这一动作，不参与大小写判断）
+    bool shiftDown_ = false;
+    bool shiftUsed_ = false;
+    DWORD shiftDownTick_ = 0;
 };
 
 } // namespace imetip

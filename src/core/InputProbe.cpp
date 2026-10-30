@@ -46,7 +46,7 @@ void InputProbe::Stop() {
     uia_.Stop();
 }
 
-InputSnapshot InputProbe::Probe(HWND ownWindow) {
+InputSnapshot InputProbe::Probe(HWND ownWindow, bool slowUia) {
     InputSnapshot snapshot;
 
     const HWND foreground = ::GetForegroundWindow();
@@ -108,7 +108,8 @@ InputSnapshot InputProbe::Probe(HWND ownWindow) {
     UiaCaretInfo uiaInfo{};
     if (!haveCaret) {
         // 浏览器 / 终端等不使用标准光标的场景，走 UIA 文本光标回退（带超时）。
-        uiaInfo = uia_.Query(70);
+        // 首次查询需要加载目标应用的 UIA 提供程序，慢一些，复查时给更长的等待。
+        uiaInfo = uia_.Query(slowUia ? 260 : 70);
         if (uiaInfo.ok && uiaInfo.editable) {
             caret = uiaInfo.caret;
             haveCaret = true;
@@ -137,15 +138,20 @@ InputSnapshot InputProbe::Probe(HWND ownWindow) {
 
     const ImeSnapshot ime = QueryImeState(threadId, focusWindow, caretWindow);
     snapshot.stateKnown = ime.valid;
-    snapshot.imeFallback = ime.viaFallback;
     if (ime.valid) {
-        lastChinese_ = ime.chinese;
+        believedChinese_ = ime.chinese;
         snapshot.chinese = ime.chinese;
     } else {
-        // 查询失败时沿用上次有效状态，不弹窗、不崩溃。
-        snapshot.chinese = lastChinese_;
+        // 系统接口读不到（TSF 应用）：使用本地维护的状态，不弹窗、不崩溃。
+        snapshot.imeInferred = true;
+        snapshot.chinese = believedChinese_;
     }
     return snapshot;
+}
+
+void InputProbe::ToggleImeState() {
+    believedChinese_ = !believedChinese_;
+    log::Write(L"按切换键推断 IME 状态：%s", believedChinese_ ? L"中" : L"英");
 }
 
 } // namespace imetip

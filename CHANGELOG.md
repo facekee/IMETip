@@ -2,6 +2,22 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.2] - 2026-10-30
+
+### 修复
+
+- **按 Shift 切到英文后仍显示「中」**：实测微信输入法（TSF）下，`ImmGetContext` 与 `WM_IME_CONTROL` 都返回固定值，无法反映真实模式。改为：
+  - 移除不可靠的 `WM_IME_CONTROL` 回退；
+  - 系统接口能读到真实状态时（传统 IMM 应用）仍以真实值为准；
+  - 读不到时（微信 / Chrome / 新版记事本等），按 **Shift 轻点 / Ctrl+Space** 的切换动作翻转本地状态，并立即刷新指示窗；
+  - 退出时记住当前状态，下次启动用于初始化，避免重启后状态错位。
+- **微信输入框仍需双击才显示**：点击未命中时改为 **200ms 与 600ms 各复查一次**，复查使用 260ms 的 UIA 等待；UIA 事务超时由 50ms 放宽到 200ms，覆盖首次加载目标应用 UIA 提供程序的耗时。
+
+### 已知限制
+
+- 若通过输入法状态栏（鼠标）而不是 Shift 切换中英文，本地推断状态会与实际不一致，直到切回传统 IMM 应用或再次用 Shift 切换。
+- WPS 表格单元格编辑仍不显示（无标准光标、无 UIA 文本选区）。
+
 ## [0.1.1] - 2026-10-30
 
 ### 修复
@@ -46,3 +62,4 @@
 
 [0.1.0]: https://github.com/imetip/imetip/releases/tag/v0.1.0
 [0.1.1]: https://github.com/imetip/imetip/releases/tag/v0.1.1
+[0.1.2]: https://github.com/imetip/imetip/releases/tag/v0.1.2
