@@ -15,7 +15,8 @@ int Scale(int value, UINT dpiValue);
 
 // 指示窗使用的 96 DPI 逻辑尺寸。
 constexpr int kBlockSize = 32;
-constexpr int kBlockGap = 5;
+// 两个色块之间的间距：留够空间让各自的阴影分开，看起来是两个独立图标而不是连成一条。
+constexpr int kBlockGap = 10;
 constexpr int kBlockRadius = 8;
 constexpr int kShadowPadding = 5;
 

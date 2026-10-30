@@ -3,7 +3,6 @@
 #include "ui/GdiplusUtil.h"
 
 #include <algorithm>
-#include <cstring>
 
 using namespace Gdiplus;
 
@@ -12,7 +11,7 @@ namespace {
 
 constexpr ARGB kTextChinese = 0xFFFFECEC; // 浅红字
 constexpr ARGB kTextEnglish = 0xFFE8F1FF; // 浅蓝字
-constexpr ARGB kTextCaps = 0xFFEEECFF;    // 浅蓝紫字
+constexpr ARGB kTextCaps = 0xFFEAFBF1;    // 浅绿字
 
 void ApplyAlpha(Bitmap& bitmap, float alpha) {
     const int width = static_cast<int>(bitmap.GetWidth());
@@ -39,21 +38,6 @@ void ApplyAlpha(Bitmap& bitmap, float alpha) {
         }
     }
     bitmap.UnlockBits(&data);
-}
-
-// 把矩形区域清成完全透明。
-// GDI+ 会跳过 alpha 为 0 的填充，所以这里直接改像素；用于保证两块之间一点残白都不留。
-void ClearRect(Bitmap& target, const Rect& rect) {
-    if (rect.Width <= 0 || rect.Height <= 0) return;
-    BitmapData data{};
-    if (target.LockBits(&rect, ImageLockModeRead | ImageLockModeWrite, PixelFormat32bppPARGB, &data) != Ok) {
-        return;
-    }
-    for (int y = 0; y < rect.Height; ++y) {
-        auto* row = static_cast<BYTE*>(data.Scan0) + static_cast<ptrdiff_t>(y) * data.Stride;
-        memset(row, 0, static_cast<size_t>(rect.Width) * 4);
-    }
-    target.UnlockBits(&data);
 }
 
 void DrawShadow(Graphics& graphics, float x, float y, float width, float height, float radius) {
@@ -89,9 +73,9 @@ void DrawBlock(Graphics& graphics, float x, float y, float size, float radius, b
     Color bottom;
     Color textColor;
     if (capsBlock) {
-        // 大写：蓝底浅蓝字（比英文块更深的蓝，便于与「英」区分）
-        top = Color(255, 92, 106, 228);
-        bottom = Color(255, 62, 74, 188);
+        // 大写：绿底浅绿字（与中文红、英文蓝都区分得开）
+        top = Color(255, 64, 186, 122);
+        bottom = Color(255, 38, 152, 94);
         textColor = Color(kTextCaps);
     } else if (chinese) {
         // 中文：红底浅红字
@@ -141,18 +125,15 @@ void RenderIndicator(Bitmap& target, const IndicatorModel& model, const Indicato
     const float block = static_cast<float>(style.block);
     const float gap = static_cast<float>(style.gap);
     const float inset = static_cast<float>(style.shadow);
-    const float totalWidth = count * block + (count - 1) * gap;
 
-    DrawShadow(graphics, inset, inset, totalWidth, block, static_cast<float>(style.radius));
+    // 每个色块各自带一份阴影：两块并排时是「两个独立图标」，而不是共用一个大阴影连成一条。
+    for (int i = 0; i < count; ++i) {
+        const float blockX = inset + i * (block + gap);
+        DrawShadow(graphics, blockX, inset, block, block, static_cast<float>(style.radius));
+    }
     for (int i = 0; i < count; ++i) {
         DrawBlock(graphics, inset + i * (block + gap), inset, block, static_cast<float>(style.radius), i == 1,
                   model.chinese);
-    }
-
-    // 两块之间的间隙按像素清零：确保中间没有任何半透明白/灰残留。
-    for (int i = 0; i + 1 < count; ++i) {
-        const int gapLeft = static_cast<int>(inset + (i + 1) * block + i * gap + 0.5f);
-        ClearRect(target, Rect(gapLeft, static_cast<int>(inset), style.gap, style.block));
     }
 
     if (alpha < 0.999f) {

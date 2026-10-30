@@ -34,6 +34,8 @@ constexpr UINT kCmdPause = 1002;
 constexpr UINT kCmdDurationBase = 1100; // + 秒数
 constexpr UINT kCmdAutostart = 1201;
 constexpr UINT kCmdCalibrate = 1251;
+constexpr UINT kCmdStateChinese = 1261;
+constexpr UINT kCmdStateEnglish = 1262;
 constexpr UINT kCmdAbout = 1301;
 constexpr UINT kCmdExit = 1401;
 
@@ -166,6 +168,7 @@ bool App::Initialize() {
 
     probe_.Start();
     probe_.SetInitialChinese(config_.imeChinese);
+    log::Write(L"初始中英文=%s（配置 imeChinese=%d）", config_.imeChinese ? L"中" : L"英", config_.imeChinese ? 1 : 0);
     events_.Start(instance_, window_, kMsgInputCheck);
 
     if (!events_.WinEventHooksInstalled() || !events_.MouseHookInstalled() || !events_.KeyboardHookInstalled()) {
@@ -753,6 +756,12 @@ void App::ShowTrayMenu(POINT point) {
     }
     ::AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(durations), L"显示时长");
 
+    HMENU states = ::CreatePopupMenu();
+    const bool believedChinese = probe_.LastKnownChinese();
+    ::AppendMenuW(states, MF_STRING | (believedChinese ? MF_CHECKED : 0), kCmdStateChinese, L"当前是中文");
+    ::AppendMenuW(states, MF_STRING | (believedChinese ? 0 : MF_CHECKED), kCmdStateEnglish, L"当前是英文");
+    ::AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(states), L"中英文校正");
+
     ::AppendMenuW(menu, MF_STRING | (autostart::IsEnabled() ? MF_CHECKED : 0), kCmdAutostart, L"开机自启");
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     ::AppendMenuW(menu, MF_STRING, kCmdCalibrate, L"校准提示位置（点击输入框）");
@@ -787,6 +796,17 @@ void App::HandleTrayCommand(UINT command) {
     }
     if (command == kCmdCalibrate) {
         StartCalibration();
+        return;
+    }
+    if (command == kCmdStateChinese || command == kCmdStateEnglish) {
+        // 部分程序读不到输入法状态，只能靠推断；基线一旦和实际错位就会一直反着显示，
+        // 这里给用户一个一键校正的入口。
+        const bool chinese = command == kCmdStateChinese;
+        probe_.SetInitialChinese(chinese);
+        config_.imeChinese = chinese;
+        config_.Save();
+        log::Write(L"手动校正中英文：%s", chinese ? L"中" : L"英");
+        ScheduleCheck();
         return;
     }
     if (command == kCmdAbout) {

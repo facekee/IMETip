@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <vector>
 
 namespace imetip {
 namespace {
@@ -59,9 +60,40 @@ std::wstring Config::FilePath() {
     return Directory() + L"\\config.ini";
 }
 
+// INI 文件必须是 ANSI / UTF-16，带 UTF-8 BOM 会让 Win32 把第一段当成 "\uFEFF[indicator]"，
+// 于是读写落到另一个同名段里，配置就"读不对"了。这里启动时把 BOM 去掉。
+void StripUtf8Bom(const std::wstring& file) {
+    HANDLE handle = ::CreateFileW(file.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
+                                  FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) return;
+
+    LARGE_INTEGER size{};
+    if (!::GetFileSizeEx(handle, &size) || size.QuadPart < 3 || size.QuadPart > 1024 * 1024) {
+        ::CloseHandle(handle);
+        return;
+    }
+    std::vector<char> data(static_cast<size_t>(size.QuadPart));
+    DWORD read = 0;
+    if (!::ReadFile(handle, data.data(), static_cast<DWORD>(data.size()), &read, nullptr) || read != data.size()) {
+        ::CloseHandle(handle);
+        return;
+    }
+    if (data[0] != '\xEF' || data[1] != '\xBB' || data[2] != '\xBF') {
+        ::CloseHandle(handle);
+        return;
+    }
+    data.erase(data.begin(), data.begin() + 3);
+    ::SetFilePointer(handle, 0, nullptr, FILE_BEGIN);
+    ::SetEndOfFile(handle);
+    DWORD written = 0;
+    ::WriteFile(handle, data.data(), static_cast<DWORD>(data.size()), &written, nullptr);
+    ::CloseHandle(handle);
+}
+
 Config Config::Load() {
     Config config;
     const std::wstring file = FilePath();
+    StripUtf8Bom(file);
     const wchar_t* path = file.c_str();
 
     config.hideDelayMs = ::GetPrivateProfileIntW(L"indicator", L"hideDelayMs", config.hideDelayMs, path);
